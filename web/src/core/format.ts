@@ -36,3 +36,6 @@ export function pastWeekdays(n: number): string[] {
   }
   return out;
 }
+
+/** The nearest expiry that has not passed (today's counts until the day is over): a list from the hub can still carry yesterday's. */
+export const nearestExpiry = (expiries: readonly string[]): string => expiries.find((d) => d >= istDate(Date.now())) ?? expiries[expiries.length - 1] ?? "";

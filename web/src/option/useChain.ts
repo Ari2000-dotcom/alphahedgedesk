@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useSummaries } from "../desk/summary";
 import type { Hub } from "../hub/client";
 import type { TopicMessage } from "../hub/types";
-import { setPrice, usePricedCount } from "./quotes";
+import { clearPrice, setPrice, usePricedCount } from "./quotes";
 
 /**
  * One option chain, live, built the way AlphaHedge's is:
  *
- * - The window is STRIKES_EACH_SIDE strikes either side of the money (41 rows), centred once the
+ * - Every strike is a row, and the table opens with the money row in the middle: centred once the
  *   spot is known and then held, so rows never jump under the pointer. A new underlying waits up
  *   to SPOT_WAIT_MS for its spot before it centres without it (on the middle strike, and once
  *   more on the price when it lands): it never centres on a guess.
+ * - Live prices are kept for the rows nearest the view only (ChainPanel calls `onView` on scroll),
+ *   LIVE_ROWS at a time, and follow it as it scrolls. A row that leaves it shows "—" until scrolled
+ *   back to; the budget shrinks if the hub refuses more and is remembered for the next chain.
  * - The table shows once most of its prices are in (REVEAL_SHARE), or after REVEAL_WAIT_MS:
  *   strikes and prices land together, and stays shown for that chain.
  * - Prices go to the quote store (option/quotes.ts), where each cell reads only its own
@@ -46,6 +49,10 @@ export interface ChainState {
   priced: number;
   total: number;
   error: string;
+  /** True when the hub won't hold a live price for every row at once: some wait to be scrolled to. */
+  limited: boolean;
+  /** The rows (by index into `rows`) actually on screen, so their prices are the ones kept live. */
+  onView: (first: number, last: number) => void;
 }
 
 interface Strike {
@@ -61,8 +68,19 @@ interface Reply {
 
 const NONE: Strike[] = [];
 
-/** Strikes either side of the money the chain lists. */
-export const STRIKES_EACH_SIDE = 20;
+/**
+ * The whole chain is the table: every strike the hub lists is a row. Live prices are kept only for
+ * the rows nearest the view, LIVE_ROWS at a time (two legs each, so about 90 topics), and follow the
+ * view as it scrolls; a row that leaves it drops its price and shows "—" until it is scrolled to.
+ * The budget shrinks when the hub answers "topic limit reached" (an older hub allows 50 live
+ * prices), and is remembered for the next chain, so the hub's real limit is learned once.
+ */
+const LIVE_ROWS = 45;
+let liveRows = LIVE_ROWS;
+const MIN_ROWS = 11;
+/** The live set follows the view in steps of this many rows, so a scroll does not resubscribe at every row. */
+const CHUNK = 6;
+
 /** A new chain waits this long for its spot before centring without it. */
 const SPOT_WAIT_MS = 1500;
 /** The table shows once this share of its prices is in, or after REVEAL_WAIT_MS. */
@@ -107,8 +125,19 @@ function nearest(strikes: readonly Strike[], spot: number): number {
   return best;
 }
 
+/** The `total` row indices nearest the [first, last] band, closest first; `total` itself once that covers it all. */
+function nearViewed(total: number, first: number, last: number, budget: number): number[] {
+  if (budget >= total) return Array.from({ length: total }, (_, i) => i);
+  const dist = (i: number) => (i < first ? first - i : i > last ? i - last : 0);
+  const order = Array.from({ length: total }, (_, i) => i).sort((a, b) => dist(a) - dist(b) || a - b);
+  return order.slice(0, budget).sort((a, b) => a - b);
+}
+
 export function useChain(hub: Hub, underlying: string, expiry: string): ChainState {
   const chainKey = underlying && expiry ? `${underlying}|${expiry}` : "";
+  const chainKeyRef = useRef(chainKey);
+  chainKeyRef.current = chainKey;
+  const [rowBudget, setRowBudget] = useState(liveRows);
   // Everything loaded is tagged with the chain it belongs to and ignored for any other: after a
   // switch the first render still holds the last chain's strikes and spot, and a window pinned on
   // those would stay at the wrong end of the new list.
@@ -182,16 +211,53 @@ export function useChain(hub: Hub, underlying: string, expiry: string): ChainSta
   }, [strikes, spot, spotLate, chainKey, pinned]);
   const centre = pinned && pinned.key === chainKey ? pinned.index : -1;
 
-  const window = useMemo(() => (centre < 0 ? [] : strikes.slice(Math.max(0, centre - STRIKES_EACH_SIDE), centre + STRIKES_EACH_SIDE + 1)), [strikes, centre]);
-  const ids = useMemo(() => window.flatMap((s) => [s.call, s.put]), [window]);
+  // Every strike is a row; the table opens on the pinned one.
+  const window = useMemo(() => (centre < 0 ? [] : strikes), [strikes, centre]);
+  const fullIds = useMemo(() => window.flatMap((s) => [s.call, s.put]), [window]);
+  const centreRow = Math.max(0, centre);
 
-  // The window's legs: one batched subscribe; prices go straight to the quote store.
+  // What ChainPanel last reported as on screen (row indices into `window`); unset until its first
+  // scroll, when it defaults to the centre row so the initial live set is still the money.
+  const [viewed, setViewed] = useState<{ key: string; first: number; last: number } | null>(null);
+  const onView = useCallback((first: number, last: number) => {
+    const key = chainKeyRef.current;
+    const from = Math.floor(Math.max(0, first) / CHUNK) * CHUNK;
+    const to = Math.ceil(Math.max(0, last) / CHUNK) * CHUNK;
+    setViewed((v) => (v && v.key === key && v.first === from && v.last === to ? v : { key, first: from, last: to }));
+  }, []);
+  const viewFirst = viewed && viewed.key === chainKey ? Math.max(0, Math.min(window.length - 1, viewed.first)) : centreRow;
+  const viewLast = viewed && viewed.key === chainKey ? Math.max(viewFirst, Math.min(window.length - 1, viewed.last)) : centreRow;
+
+  // The legs actually subscribed: every one of them while the hub allows it; once it doesn't, the
+  // ones nearest the view, so scrolling trades a far row's price for a closer one instead of
+  // thrashing subscriptions on every tick. Returns `fullIds` itself (not a new array) when
+  // unlimited, so scrolling an ordinary chain never re-triggers the subscribe effect below.
+  const ids = useMemo(() => {
+    if (rowBudget >= window.length) return fullIds;
+    const rowsLive = nearViewed(window.length, viewFirst, viewLast, rowBudget);
+    const money = spot !== null && window.length > 0 ? nearest(window, spot) : -1;
+    if (money >= 0 && !rowsLive.includes(money)) rowsLive.push(money);
+    return rowsLive.flatMap((i) => [window[i]!.call, window[i]!.put]);
+  }, [window, fullIds, rowBudget, viewFirst, viewLast, spot]);
+
+  // The live legs: one batched subscribe; prices go straight to the quote store. A leg dropped from
+  // the active set (scrolled out of reach) forgets its price, so it shows "—" rather than one that
+  // can no longer change.
+  const activeFor = useRef<string[]>([]);
   useEffect(() => {
+    const next = new Set(ids);
+    for (const id of activeFor.current) if (!next.has(id)) clearPrice(id);
+    activeFor.current = ids;
     if (ids.length === 0) return;
     const stops = ids.map((id) =>
       hub.subscribe(`quote:${id}`, (msg: TopicMessage) => {
         const p = (msg as { ltp?: number }).ltp;
         if (msg.t === "q" && typeof p === "number" && p > 0) setPrice(id, p);
+        else if (msg.t === "err" && /topic limit/i.test(String((msg as { error?: unknown }).error ?? ""))) {
+          // The hub will not hold this many: keep fewer live at once, and remember it for next time.
+          liveRows = Math.max(MIN_ROWS, Math.floor(liveRows * 0.6));
+          setRowBudget((r) => Math.min(r, liveRows));
+        }
       }),
     );
     return () => {
@@ -213,5 +279,18 @@ export function useChain(hub: Hub, underlying: string, expiry: string): ChainSta
   const atm = spot !== null && rows.length > 0 ? rows.reduce((a, b) => (Math.abs(b.strike - spot) < Math.abs(a.strike - spot) ? b : a)).strike : null;
   const waiting = strikes.length === 0 ? "Loading the strikes" : centre < 0 ? "Finding the price" : "Loading prices";
 
-  return { rows, spot, atm, scrollKey: windowKey, ready, waiting, priced: shownOnce ? ids.length : priced, total: ids.length, error };
+  return {
+    rows,
+    spot,
+    atm,
+    scrollKey: windowKey,
+    ready,
+    waiting,
+    priced: shownOnce ? ids.length : priced,
+    total: ids.length,
+    error,
+    // True only when the hub has actually refused prices (the budget shrank), not merely because the chain is long.
+    limited: rowBudget < LIVE_ROWS,
+    onView,
+  };
 }

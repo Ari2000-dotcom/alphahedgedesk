@@ -19,6 +19,13 @@ export function setPrice(id: string, price: number): void {
   everyone.forEach((fn) => fn());
 }
 
+/** Forgets a contract's price (its row has left the live set): it shows "—" until the next one. */
+export function clearPrice(id: string): void {
+  if (!prices.delete(id)) return;
+  byId.get(id)?.forEach((fn) => fn());
+  everyone.forEach((fn) => fn());
+}
+
 function subscribe(id: string, fn: () => void): () => void {
   let set = byId.get(id);
   if (!set) byId.set(id, (set = new Set()));

@@ -300,3 +300,8 @@
   color: var(--mh-text-secondary);
   font-size: var(--mh-size-caption);
 }
+
+.mh-chain-limit {
+  margin-left: 10px;
+  color: var(--mh-text-tertiary);
+}

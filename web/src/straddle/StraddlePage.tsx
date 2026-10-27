@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { dayLabel, fmt0, fmt2, istDate, pastWeekdays } from "../core/format";
+import { dayLabel, fmt0, fmt2, istDate, nearestExpiry, pastWeekdays } from "../core/format";
 import type { Hub } from "../hub/client";
 import type { Bar, StraddleSnapshot, StraddleUpdate, TopicMessage, Underlying } from "../hub/types";
 import { Dropdown } from "../ui/Dropdown";
@@ -40,10 +40,17 @@ export interface Pick {
 export function readPick(): Pick | null {
   try {
     const raw = localStorage.getItem(LAST_PICK);
-    return raw ? (JSON.parse(raw) as Pick) : null;
+    return raw ? freshPick(JSON.parse(raw) as Pick) : null;
   } catch {
     return null;
   }
+}
+
+/** A live pick whose expiry has passed moves to the nearest one that has not; a past session keeps its own. */
+export function freshPick(pick: Pick | null): Pick | null {
+  if (!pick || pick.day !== "live" || pick.expiry >= istDate(Date.now())) return pick;
+  const next = nearestExpiry(pick.underlying.expiries);
+  return next && next !== pick.expiry ? { ...pick, expiry: next } : pick;
 }
 
 /** Puts `bar` in its minute: replaces that minute's bar, or adds it in order. */
@@ -88,7 +95,7 @@ export function StraddlePage({
   active?: boolean;
   onPick?: (pick: Pick | null) => void;
 }>) {
-  const [pick, setPick] = useState<Pick | null>(() => (initialPick !== undefined ? initialPick : readPick()));
+  const [pick, setPick] = useState<Pick | null>(() => (initialPick !== undefined ? freshPick(initialPick) : readPick()));
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
   const [query, setQuery] = useState("");
@@ -136,7 +143,7 @@ export function StraddlePage({
   }, [query, hub, connected]);
 
   const choose = (u: Underlying) => {
-    setPick({ underlying: u, expiry: u.expiries[0] ?? "", day: "live" });
+    setPick({ underlying: u, expiry: nearestExpiry(u.expiries), day: "live" });
     setQuery("");
     setResults([]);
   };

@@ -1,11 +1,11 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { impliedVol, yearsToExpiry } from "../core/black76";
-import { fmt2 } from "../core/format";
+import { fmt2, nearestExpiry } from "../core/format";
 import { ATM_COLOUR, MAX_STRADDLES, clearPicks, countFor, picksFor, togglePick, useCompare } from "../desk/compare";
 import type { Hub } from "../hub/client";
 import type { Underlying } from "../hub/types";
-import { PICK_EVENT, readPick, type Pick } from "../straddle/StraddlePage";
+import { freshPick, PICK_EVENT, readPick, type Pick } from "../straddle/StraddlePage";
 import { Dropdown } from "../ui/Dropdown";
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon, Spinner } from "../ui/icons";
 import { useQuote } from "./quotes";
@@ -36,7 +36,7 @@ export function ChainPanel({
   initialPick,
   onPick,
 }: Readonly<{ hub: Hub; initialPick?: Pick | null; onPick?: (pick: Pick | null) => void }>) {
-  const [pick, setPick] = useState<Pick | null>(() => (initialPick ? initialPick : readPick()));
+  const [pick, setPick] = useState<Pick | null>(() => (initialPick ? freshPick(initialPick) : readPick()));
   // Until the chain's own search is used, it follows whatever the charts last picked.
   const own = useRef(Boolean(initialPick));
   useEffect(() => {
@@ -112,7 +112,7 @@ export function ChainPanel({
 
   const choose = (u: Underlying) => {
     own.current = true;
-    setPick({ underlying: u, expiry: u.expiries[0] ?? "", day: "live" });
+    setPick({ underlying: u, expiry: nearestExpiry(u.expiries), day: "live" });
     setQuery("");
     setResults([]);
   };
@@ -133,6 +133,15 @@ export function ChainPanel({
   const toggle = useCallback((strike: number) => togglePick(id, expiry, strike), [id, expiry]);
 
   // The money row in the middle of the view, once per chain, as it is drawn.
+  const ROW_H = 34;
+  const HEAD_H = 30;
+  const reportView = useCallback(() => {
+    const box = scroller.current;
+    if (!box) return;
+    const first = Math.floor((box.scrollTop - 0) / ROW_H);
+    const last = Math.ceil((box.scrollTop + box.clientHeight - HEAD_H) / ROW_H);
+    chain.onView(first, last);
+  }, [chain.onView]); // eslint-disable-line react-hooks/exhaustive-deps
   const scrolledFor = useRef("");
   useLayoutEffect(() => {
     if (!chain.ready || !chain.scrollKey || scrolledFor.current === chain.scrollKey) return;
@@ -141,6 +150,7 @@ export function ChainPanel({
     if (box && atm) {
       box.scrollTop = atm.offsetTop - box.clientHeight / 2 + atm.offsetHeight / 2;
       scrolledFor.current = chain.scrollKey;
+      reportView();
     }
   }, [chain.ready, chain.scrollKey, chain.rows]);
 
@@ -277,7 +287,7 @@ export function ChainPanel({
         </div>
       ) : (
         <>
-          <div className="mh-chain-scroll" ref={scroller}>
+          <div className="mh-chain-scroll" ref={scroller} onScroll={reportView}>
             <table className="mh-chain-table">
               <colgroup>
                 {narrow ? null : <col className="mh-col-iv" />}
@@ -322,6 +332,11 @@ export function ChainPanel({
             <span>
               {count} of {MAX_STRADDLES} straddles on the chart
             </span>
+            {chain.limited ? (
+              <span className="mh-chain-limit" title="The hub lets each visitor hold only so many live prices, so rows far from the view wait to be scrolled to. Raising max_topics in its config.toml keeps more of them live.">
+                Live prices near the view: hub limit
+              </span>
+            ) : null}
             <span className="mh-spacer" />
             <button type="button" className="mh-link-btn" onClick={clearPicks} disabled={picks.length === 0}>
               Clear
