@@ -24,7 +24,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 1 190px;
+  flex: 0 1 230px;
+  cursor: text;
   min-width: 0;
   height: 28px;
   padding: 0 8px;
@@ -36,13 +37,23 @@
 .mh-chain-find:focus-within {
   border-color: var(--mh-focus);
 }
-.mh-chain-subject {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
+.mh-chain-input::placeholder {
+  color: var(--mh-text-tertiary);
+}
+.mh-chain-find[data-has-pick] .mh-chain-input::placeholder {
   color: var(--mh-text-strong);
-  white-space: nowrap;
+}
+.mh-chain-clear {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
 }
 .mh-chain-input {
   flex: 1;

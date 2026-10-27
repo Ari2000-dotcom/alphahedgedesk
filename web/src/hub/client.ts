@@ -42,6 +42,10 @@ export class Hub {
   private attempt = 0;
   private nextReq = 1;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Topics to subscribe or drop, sent as one message each per tick: a chain opens dozens at once. */
+  private readonly subQ = new Set<string>();
+  private readonly unsubQ = new Set<string>();
+  private flushing = false;
   private stopped = false;
 
   constructor(private readonly url: string) {
@@ -64,7 +68,7 @@ export class Hub {
     if (!set) {
       set = new Set();
       this.topics.set(topic, set);
-      this.send({ op: "sub", topics: [topic] });
+      this.queue("sub", topic);
     }
     set.add(fn);
     return () => {
@@ -73,7 +77,7 @@ export class Hub {
       s.delete(fn);
       if (s.size === 0) {
         this.topics.delete(topic);
-        this.send({ op: "unsub", topics: [topic] });
+        this.queue("unsub", topic);
       }
     };
   }
@@ -152,6 +156,24 @@ export class Hub {
     if (msg.topic) {
       for (const fn of this.topics.get(msg.topic) ?? []) fn(msg);
     }
+  }
+
+  /** A "sub" and an "unsub" of one topic in the same tick cancel out; the rest go in one message each. */
+  private queue(kind: "sub" | "unsub", topic: string): void {
+    if (kind === "sub") {
+      if (!this.unsubQ.delete(topic)) this.subQ.add(topic);
+    } else if (!this.subQ.delete(topic)) {
+      this.unsubQ.add(topic);
+    }
+    if (this.flushing) return;
+    this.flushing = true;
+    queueMicrotask(() => {
+      this.flushing = false;
+      if (this.unsubQ.size > 0) this.send({ op: "unsub", topics: [...this.unsubQ] });
+      if (this.subQ.size > 0) this.send({ op: "sub", topics: [...this.subQ] });
+      this.unsubQ.clear();
+      this.subQ.clear();
+    });
   }
 
   private send(op: Record<string, unknown>): void {

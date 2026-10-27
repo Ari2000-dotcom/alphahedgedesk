@@ -32,6 +32,12 @@ use tokio::sync::{mpsc, Notify};
 /// so a quick reload doesn't churn the broker subscription.
 const UNSUB_GRACE: Duration = Duration::from_secs(30);
 
+/// Instruments the hub holds at the brokers at once, for everyone together. Each is one broker
+/// subscription, shared by every user watching it, so this only bites when many people watch many
+/// different things (a crowd opening option chains on dozens of underlyings). Past it a new
+/// instrument is refused with a plain message; ones already held keep working and are shared.
+const MAX_LIVE_TOPICS: usize = 3000;
+
 pub enum FeedCmd {
     Sub(InstrumentId),
     Unsub(InstrumentId),
@@ -176,6 +182,9 @@ impl LiveHub {
             let mut st = t.state.lock();
             st.subs.push(mailbox.clone());
             return Ok(st.last.clone());
+        }
+        if topics.by_name.len() >= MAX_LIVE_TOPICS {
+            return Err("the hub is watching as many instruments as it can right now; try again in a minute".into());
         }
         if !topics.by_feed.contains_key(&id.0) {
             let _ = self.feeds[feed].send(FeedCmd::Sub(id.clone()));

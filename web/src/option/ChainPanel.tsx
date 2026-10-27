@@ -6,7 +6,7 @@ import type { Hub } from "../hub/client";
 import type { Underlying } from "../hub/types";
 import { PICK_EVENT, readPick, type Pick } from "../straddle/StraddlePage";
 import { Dropdown } from "../ui/Dropdown";
-import { CheckIcon, PlusIcon, SearchIcon } from "../ui/icons";
+import { CheckIcon, CloseIcon, PlusIcon, SearchIcon } from "../ui/icons";
 import { useChain } from "./useChain";
 import "./chain.css";
 
@@ -46,6 +46,8 @@ export function ChainPanel({
   }, []);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Underlying[]>([]);
+  const [active, setActive] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
   const [connected, setConnected] = useState(hub.state === "open");
   const [narrow, setNarrow] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -119,24 +121,58 @@ export function ChainPanel({
   return (
     <div className="mh-chain" ref={box} data-narrow={narrow || undefined}>
       <div className="mh-chain-strip">
-        <div className="mh-chain-find">
+        <div className="mh-chain-find" data-has-pick={pick ? "" : undefined} onClick={() => input.current?.focus()}>
           <SearchIcon size={14} />
-          {pick && !query ? (
-            <span className="mh-chain-subject">
-              {pick.underlying.name} <span className="mh-chip">{exchange}</span>
-            </span>
-          ) : null}
           <input
+            ref={input}
             className="mh-chain-input"
             value={query}
-            placeholder={pick ? "" : "Search an underlying"}
-            onChange={(e) => setQuery(e.target.value)}
+            placeholder={pick ? `${pick.underlying.name}  ${exchange}` : "Search: nifty, sensex, crudeoil"}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown" && results.length > 0) {
+                e.preventDefault();
+                setActive((i) => (i + 1) % results.length);
+              } else if (e.key === "ArrowUp" && results.length > 0) {
+                e.preventDefault();
+                setActive((i) => (i - 1 + results.length) % results.length);
+              } else if (e.key === "Enter" && results[active]) {
+                choose(results[active]!);
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                setQuery("");
+                setResults([]);
+                e.currentTarget.blur();
+              }
+            }}
+            role="combobox"
+            aria-expanded={results.length > 0}
             aria-label="Search an underlying"
           />
+          {query ? (
+            <button type="button" className="mh-chain-clear" aria-label="Clear" onClick={() => setQuery("")}>
+              <CloseIcon size={12} />
+            </button>
+          ) : null}
           {results.length > 0 ? (
             <ul className="mh-menu mh-chain-results" role="listbox">
-              {results.map((u) => (
-                <li key={u.id} className="mh-menu-item" role="option" aria-selected={false} onClick={() => choose(u)}>
+              {results.map((u, i) => (
+                <li
+                  key={u.id}
+                  className={i === active ? "mh-menu-item mh-active" : "mh-menu-item"}
+                  role="option"
+                  aria-selected={i === active}
+                  onPointerEnter={() => setActive(i)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    choose(u);
+                  }}
+                >
                   <span className="mh-menu-text">{u.name}</span>
                   <span className="mh-chip">{u.id.split(":")[0]!.toUpperCase()}</span>
                 </li>

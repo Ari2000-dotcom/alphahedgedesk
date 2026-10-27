@@ -155,7 +155,10 @@ struct ChainRow {
 
 type ChainKey = (Market, String, NaiveDate);
 /// Chains kept in RAM for resolving legs; least recently used beyond this are dropped.
-const CHAIN_CACHE: usize = 32;
+/// Chains are cached per underlying and expiry, but filled a whole exchange at a time: one pass
+/// over its file answers every chain on it, and anything that looks a leg up (a quote topic, a
+/// straddle) finds its chain in memory. Roughly 2 MB for NSE's options; cleared with each new
+/// instrument list.
 
 #[derive(Default)]
 struct Catalog {
@@ -170,6 +173,8 @@ pub struct Instruments {
     http: reqwest::Client,
     catalog: RwLock<Arc<Catalog>>,
     chains: parking_lot::Mutex<HashMap<ChainKey, (Arc<Vec<ChainRow>>, Instant)>>,
+    /// Held while an exchange file is read, so a crowd asking for chains reads it once, not once each.
+    scan_gate: parking_lot::Mutex<()>,
     described: parking_lot::Mutex<HashMap<String, Described>>,
     refresh: tokio::sync::Mutex<()>,
     last_check: parking_lot::Mutex<Option<Instant>>,
@@ -202,6 +207,7 @@ impl Instruments {
             refresh: tokio::sync::Mutex::new(()),
             last_check: parking_lot::Mutex::new(None),
             chains: parking_lot::Mutex::new(HashMap::new()),
+            scan_gate: parking_lot::Mutex::new(()),
             described: parking_lot::Mutex::new(HashMap::new()),
         });
         // Whatever is on disk is usable at once, even before any check.
@@ -573,38 +579,49 @@ impl Instruments {
             .collect())
     }
 
-    /// From the small RAM cache, else read from disk and cached.
+    /// From the RAM cache; a miss reads the exchange's file once and caches every chain on it.
     fn chain_rows(&self, market: Market, name_upper: &str, expiry: NaiveDate) -> anyhow::Result<Arc<Vec<ChainRow>>> {
         let key = (market, name_upper.to_string(), expiry);
-        if let Some((rows, used)) = self.chains.lock().get_mut(&key) {
-            *used = Instant::now();
-            return Ok(rows.clone());
+        let hit = |key: &ChainKey| {
+            self.chains.lock().get_mut(key).map(|(rows, used)| {
+                *used = Instant::now();
+                rows.clone()
+            })
+        };
+        if let Some(rows) = hit(&key) {
+            return Ok(rows);
         }
-        let rows = Arc::new(self.read_chain(market.derivatives_exchange(), name_upper, expiry)?);
-        let mut cache = self.chains.lock();
-        if cache.len() >= CHAIN_CACHE {
-            if let Some(oldest) = cache.iter().min_by_key(|(_, (_, used))| *used).map(|(k, _)| k.clone()) {
-                cache.remove(&oldest);
-            }
-        }
-        cache.insert(key, (rows.clone(), Instant::now()));
-        Ok(rows)
+        self.fill_exchange(market)?;
+        // Nothing for this name and expiry on the exchange: an empty chain, as before.
+        Ok(hit(&key).unwrap_or_default())
     }
 
-    fn read_chain(&self, exchange: &str, name: &str, expiry: NaiveDate) -> anyhow::Result<Vec<ChainRow>> {
-        let mut by_strike: BTreeMap<i64, (f64, Option<u32>, Option<u32>)> = BTreeMap::new();
-        scan_parquet(&self.file(exchange), |r| {
-            if r.name != name || r.expiry != Some(expiry) {
+    /// Reads one derivatives file in a single pass and caches every (name, expiry) chain on it.
+    /// One reader at a time: callers that waited find it filled and return at once.
+    fn fill_exchange(&self, market: Market) -> anyhow::Result<()> {
+        let _one_at_a_time = self.scan_gate.lock();
+        if self.chains.lock().keys().any(|(m, _, _)| *m == market) {
+            return Ok(());
+        }
+        let mut all: HashMap<(String, NaiveDate), BTreeMap<i64, (f64, Option<u32>, Option<u32>)>> = HashMap::new();
+        scan_parquet(&self.file(market.derivatives_exchange()), |r| {
+            let Some(expiry) = r.expiry else { return };
+            if !matches!(r.kind, Kind::Call | Kind::Put) {
                 return;
             }
-            let e = by_strike.entry((r.strike * 100.0).round() as i64).or_insert((r.strike, None, None));
+            let e = all.entry((r.name.to_string(), expiry)).or_default().entry((r.strike * 100.0).round() as i64).or_insert((r.strike, None, None));
             match r.kind {
                 Kind::Call => e.1 = Some(r.token),
-                Kind::Put => e.2 = Some(r.token),
-                _ => {}
+                _ => e.2 = Some(r.token),
             }
         })?;
-        Ok(by_strike.into_values().filter_map(|(strike, c, p)| Some(ChainRow { strike, call: c?, put: p? })).collect())
+        let now = Instant::now();
+        let mut cache = self.chains.lock();
+        for ((name, expiry), by_strike) in all {
+            let rows: Vec<ChainRow> = by_strike.into_values().filter_map(|(strike, c, p)| Some(ChainRow { strike, call: c?, put: p? })).collect();
+            cache.insert((market, name, expiry), (Arc::new(rows), now));
+        }
+        Ok(())
     }
 
     pub fn summary(&self) -> serde_json::Value {

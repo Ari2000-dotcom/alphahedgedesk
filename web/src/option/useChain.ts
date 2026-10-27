@@ -7,8 +7,17 @@ import type { TopicMessage } from "../hub/types";
 /**
  * One option chain, live: the strikes from the hub's `chain` request, then the quotes of the
  * strikes around the money only (the hub lets a connection hold 50 live topics, and the page
- * holds a few for the indices and the chart). The window re-centres when spot has moved three
- * strikes, not on every tick, so subscriptions do not churn.
+ * holds a few for the indices and the chart).
+ *
+ * Built to show something at once, and to cost the hub little when many people open chains:
+ *
+ * - The strike list is asked for once per underlying and expiry and kept (it does not change in
+ *   a day), and a second chain asking while the first is in flight shares the one request.
+ * - Spot is subscribed at the same moment as the strikes are asked for, not after them, and the
+ *   rows show as soon as the strikes are in, centred on the last spot this computer saw until
+ *   the live one arrives.
+ * - The window's centre snaps to a grid of strikes, so everyone looking at the same underlying
+ *   subscribes the same legs: the hub holds one broker subscription per leg for all of them.
  *
  * What the hub's feed carries is the last price, bid, ask and volume; open interest is not in
  * it, so the chain shows prices, the straddle at each strike and the IV worked out here
@@ -44,7 +53,50 @@ interface Strike {
   put: string;
 }
 
-const RECENTRE_AT = 3;
+interface Reply {
+  reference: string | null;
+  strikes: Strike[];
+}
+
+/** Strike lists by underlying and expiry: one request each, shared and kept for the session. */
+const replies = new Map<string, Promise<Reply>>();
+const KEEP_MS = 30 * 60_000;
+
+function strikesOf(hub: Hub, underlying: string, expiry: string): Promise<Reply> {
+  const key = `${underlying}|${expiry}`;
+  let pending = replies.get(key);
+  if (!pending) {
+    pending = hub
+      .request<{ reference: string | null; strikes: Strike[] }>({ op: "chain", underlying, expiry }, "chain")
+      .then((r) => ({ reference: r.reference, strikes: [...r.strikes].sort((a, b) => a.strike - b.strike) }));
+    replies.set(key, pending);
+    pending.catch(() => replies.delete(key));
+    setTimeout(() => replies.delete(key), KEEP_MS);
+  }
+  return pending;
+}
+
+/** The last spot seen for an underlying on this computer: where to centre before the live one. */
+const spotKey = (underlying: string) => `mh.spot.${underlying}`;
+function lastSpot(underlying: string): number | null {
+  try {
+    const v = Number(localStorage.getItem(spotKey(underlying)));
+    return v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The window moves in steps of this many strikes, so people on one underlying share their legs. */
+const GRID = 4;
+/** Spot has to be this many strikes from the centre before the window moves. */
+const MOVE_AT = 5;
+
+function nearest(strikes: readonly Strike[], spot: number): number {
+  let best = 0;
+  for (let i = 1; i < strikes.length; i++) if (Math.abs(strikes[i]!.strike - spot) < Math.abs(strikes[best]!.strike - spot)) best = i;
+  return best;
+}
 
 export function useChain(hub: Hub, underlying: string, expiry: string, reach = 8): ChainState {
   const [strikes, setStrikes] = useState<Strike[]>([]);
@@ -52,26 +104,36 @@ export function useChain(hub: Hub, underlying: string, expiry: string, reach = 8
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(hub.state === "open");
-  const [spot, setSpot] = useState<number | null>(null);
+  const [spotA, setSpotA] = useState<number | null>(null);
+  const [spotB, setSpotB] = useState<number | null>(null);
   const [centre, setCentre] = useState(-1);
   const [tick, setTick] = useState(0);
   const ltp = useRef(new Map<string, number>());
+  const spot = spotB ?? spotA;
 
   useEffect(() => hub.onStatus((s) => setConnected(s === "open")), [hub]);
 
-  // The strikes, once per pair.
+  // A different underlying starts clean.
+  useEffect(() => {
+    setStrikes([]);
+    setReference("");
+    setSpotA(null);
+    setSpotB(null);
+    setCentre(-1);
+    setError("");
+  }, [underlying, expiry]);
+
+  // The strikes: kept per pair, shared between panels.
   useEffect(() => {
     if (!underlying || !expiry || !connected) return;
     let cancelled = false;
     setLoading(true);
     setError("");
-    hub
-      .request<{ reference: string; strikes: Strike[] }>({ op: "chain", underlying, expiry }, "chain")
+    strikesOf(hub, underlying, expiry)
       .then((r) => {
         if (cancelled) return;
-        setReference(r.reference);
-        setStrikes([...r.strikes].sort((a, b) => a.strike - b.strike));
-        setCentre(-1);
+        setReference(r.reference ?? "");
+        setStrikes(r.strikes);
       })
       .catch((e: Error) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
@@ -80,29 +142,50 @@ export function useChain(hub: Hub, underlying: string, expiry: string, reach = 8
     };
   }, [hub, underlying, expiry, connected]);
 
-  // Spot.
+  // Spot: asked for now, in step with the strikes, by the underlying's own name...
   useEffect(() => {
-    if (!reference) return;
+    if (!underlying) return;
+    return hub.subscribe(`quote:${underlying}`, (msg: TopicMessage) => {
+      const p = (msg as { ltp?: number }).ltp;
+      if (msg.t === "q" && typeof p === "number" && p > 0) setSpotA(p);
+    });
+  }, [hub, underlying]);
+  // ...and by the reference the hub names for this expiry when that is another instrument (a future).
+  useEffect(() => {
+    if (!reference || reference === underlying) return;
     return hub.subscribe(`quote:${reference}`, (msg: TopicMessage) => {
       const p = (msg as { ltp?: number }).ltp;
-      if (msg.t === "q" && typeof p === "number" && p > 0) setSpot(p);
+      if (msg.t === "q" && typeof p === "number" && p > 0) setSpotB(p);
     });
-  }, [hub, reference]);
+  }, [hub, reference, underlying]);
 
-  // The window's centre: the first time, and again when spot has moved RECENTRE_AT strikes.
+  // Remember the spot for the next visit, at most every few seconds.
+  const saved = useRef(0);
   useEffect(() => {
-    if (spot === null || strikes.length === 0) return;
-    let best = 0;
-    for (let i = 1; i < strikes.length; i++) if (Math.abs(strikes[i]!.strike - spot) < Math.abs(strikes[best]!.strike - spot)) best = i;
-    setCentre((was) => (was < 0 || Math.abs(best - was) >= RECENTRE_AT ? best : was));
-  }, [spot, strikes]);
+    if (spot === null || !underlying || Date.now() - saved.current < 5000) return;
+    saved.current = Date.now();
+    try {
+      localStorage.setItem(spotKey(underlying), String(spot));
+    } catch {
+      // A per-viewer convenience only.
+    }
+  }, [spot, underlying]);
+
+  // The window's centre: from the live spot, else the last one seen, else the middle of the list.
+  useEffect(() => {
+    if (strikes.length === 0) return;
+    const at = spot ?? lastSpot(underlying);
+    const best = at !== null ? nearest(strikes, at) : Math.floor(strikes.length / 2);
+    const snapped = Math.min(strikes.length - 1, Math.max(0, Math.round(best / GRID) * GRID));
+    setCentre((was) => (was < 0 || Math.abs(best - was) > MOVE_AT ? snapped : was));
+  }, [spot, strikes, underlying]);
 
   const windowed = useMemo(() => {
     if (centre < 0) return [];
     return strikes.slice(Math.max(0, centre - reach), centre + reach + 1);
   }, [strikes, centre, reach]);
 
-  // The window's legs, a render at most per frame.
+  // The window's legs, a render at most per frame. Subscribed together: the client sends them as one message.
   useEffect(() => {
     if (windowed.length === 0) return;
     let frame: number | null = null;
