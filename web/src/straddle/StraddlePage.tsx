@@ -393,7 +393,7 @@ export function StraddlePage({
             <input
               ref={searchBox}
               type="text"
-              placeholder={pick ? `${pick.underlying.name}  ${exchange}` : "Search: nifty, sensex, crudeoil"}
+              placeholder={pick ? "" : "Search: nifty, sensex, crudeoil"}
               value={query}
               spellCheck={false}
               autoComplete="off"
@@ -418,6 +418,11 @@ export function StraddlePage({
               aria-controls="mh-search-results"
               aria-label="Search an underlying"
             />
+            {pick && !query ? (
+              <span className="mh-subject" aria-hidden>
+                {pick.underlying.name} <span className="mh-chip">{exchange}</span>
+              </span>
+            ) : null}
             {query ? (
               <button type="button" className="mh-icon-btn mh-small" aria-label="Clear" title="Clear" onClick={() => setQuery("")}>
                 <CloseIcon size={13} />
@@ -460,6 +465,7 @@ export function StraddlePage({
             <>
               <Dropdown
                 label="Expiry"
+                caption={false}
                 value={pick.expiry}
                 onChange={(expiry) => setPick({ ...pick, expiry })}
                 renderValue={(o) =>
@@ -473,6 +479,7 @@ export function StraddlePage({
               />
               <Dropdown
                 label="Session"
+                caption={false}
                 value={pick.day}
                 onChange={(day) => setPick({ ...pick, day })}
                 tone={live ? undefined : "warn"}
@@ -492,9 +499,9 @@ export function StraddlePage({
                   <>
                     <Readout label="ATM" value={`${fmt0(last.strike)}${last.rolled ? " (rolled)" : ""}`} />
                     <Readout label="Straddle" value={fmt2(last.straddle)} change={first ? move(last.straddle, first.straddle) : null} />
-                    <Readout label="IV" value={last.iv != null ? `${last.iv.toFixed(2)}%` : "—"} change={first?.iv != null && last.iv != null ? { text: `${signed(last.iv - first.iv)} pts`, tone: tone(last.iv - first.iv) } : null} />
-                    <Readout label="Spot" value={fmt2(last.spot)} change={first ? move(last.spot, first.spot) : null} />
-                    <span className="mh-readout mh-quiet">
+                    <Readout className="mh-r-iv" label="IV" value={last.iv != null ? `${last.iv.toFixed(2)}%` : "—"} change={first?.iv != null && last.iv != null ? { text: `${signed(last.iv - first.iv)} pts`, tone: tone(last.iv - first.iv) } : null} />
+                    <Readout className="mh-r-spot" label="Spot" value={fmt2(last.spot)} change={first ? move(last.spot, first.spot) : null} />
+                    <span className="mh-readout mh-quiet mh-r-lot">
                       Lot {fmt0(pick.underlying.lot)} · {bars.length} min
                     </span>
                   </>
@@ -643,9 +650,9 @@ function move(now: number, from: number): { text: string; tone: Tone } {
 }
 
 /** One quiet readout on the strip: label one ink tier down, value, and its move since the open. */
-function Readout({ label, value, change }: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null }>) {
+function Readout({ label, value, change, className }: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null; className?: string }>) {
   return (
-    <span className="mh-readout">
+    <span className={className ? `mh-readout ${className}` : "mh-readout"}>
       <span className="mh-readout-label">{label}</span>
       <span className="mh-readout-value">{value}</span>
       {change ? <span className={`mh-readout-move ${change.tone}`}>{change.text}</span> : null}

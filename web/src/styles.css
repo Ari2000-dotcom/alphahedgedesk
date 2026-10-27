@@ -298,6 +298,7 @@ input {
 /* A straddle's body inside its dock container: the strip, then the chart. The plate, its
    corner and its outline are the container's (theme/dock.css). */
 .mh-container {
+  container-type: inline-size;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -398,6 +399,28 @@ input {
 .mh-has-subject input:not(:focus)::placeholder {
   color: var(--mh-text-strong);
   font-weight: var(--mh-weight-emphasis);
+}
+/* The picked underlying: its name and the exchange as a badge, over the empty field. */
+.mh-subject {
+  position: absolute;
+  left: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+  pointer-events: none;
+}
+.mh-search input:focus ~ .mh-subject {
+  display: none;
+}
+.mh-subject .mh-chip {
+  height: 17px;
+  padding: 0 5px;
+  border: 1px solid var(--mh-line-strong);
+  background: transparent;
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
 .mh-search .mh-icon-btn {
   position: absolute;
@@ -935,6 +958,43 @@ input {
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+
+/* The strip gives way by its container's width, not the window's: the least needed first
+   (lot and minutes, then spot, then IV), and below that the readouts take a row of their own. */
+@container (max-width: 1240px) {
+  .mh-strip .mh-r-lot {
+    display: none;
+  }
+}
+@container (max-width: 1080px) {
+  .mh-strip .mh-r-spot {
+    display: none;
+  }
+}
+@container (max-width: 900px) {
+  .mh-strip .mh-r-iv {
+    display: none;
+  }
+}
+@container (max-width: 560px) {
+  .mh-strip {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .mh-strip > .mh-spacer {
+    display: none;
+  }
+  .mh-strip .mh-readouts {
+    flex-basis: 100%;
+    padding: 2px 4px;
+  }
+  .mh-strip .mh-r-iv,
+  .mh-strip .mh-r-spot {
+    display: inline-flex;
+  }
 }
 
 /* -- narrow windows: the strip wraps, readouts take their own row ------------- */
