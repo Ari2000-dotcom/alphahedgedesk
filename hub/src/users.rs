@@ -40,8 +40,9 @@ pub struct UserCfg {
 fn default_connections() -> usize {
     3
 }
+/// An option chain holds about 90 (41 strikes, both legs) beside the indices and a chart.
 fn default_topics() -> usize {
-    50
+    120
 }
 fn default_history() -> u32 {
     200

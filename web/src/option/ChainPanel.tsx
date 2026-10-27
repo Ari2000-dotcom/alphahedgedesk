@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { impliedVol, yearsToExpiry } from "../core/black76";
 import { fmt2 } from "../core/format";
 import { ATM_COLOUR, MAX_STRADDLES, clearPicks, countFor, picksFor, togglePick, useCompare } from "../desk/compare";
 import type { Hub } from "../hub/client";
 import type { Underlying } from "../hub/types";
 import { PICK_EVENT, readPick, type Pick } from "../straddle/StraddlePage";
 import { Dropdown } from "../ui/Dropdown";
-import { CheckIcon, CloseIcon, PlusIcon, SearchIcon } from "../ui/icons";
-import { useChain } from "./useChain";
+import { CheckIcon, CloseIcon, PlusIcon, SearchIcon, Spinner } from "../ui/icons";
+import { useQuote } from "./quotes";
+import { useChain, type ChainRow } from "./useChain";
 import "./chain.css";
 
 const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
@@ -53,7 +55,7 @@ export function ChainPanel({
   const [connected, setConnected] = useState(hub.state === "open");
   const [narrow, setNarrow] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const spotRow = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => hub.onStatus((s) => setConnected(s === "open")), [hub]);
 
   useEffect(() => {
@@ -128,17 +130,30 @@ export function ChainPanel({
   const count = countFor(compare, id, expiry);
   const full = count >= MAX_STRADDLES;
   const colourOf = useMemo(() => new Map(picks.map((p) => [p.strike, p.colour])), [picks]);
+  const toggle = useCallback((strike: number) => togglePick(id, expiry, strike), [id, expiry]);
 
-  // Keep the money in view as the strikes come in.
-  const centred = useRef("");
-  useEffect(() => {
-    if (chain.rows.length === 0 || centred.current === `${id}|${expiry}`) return;
-    centred.current = `${id}|${expiry}`;
-    spotRow.current?.scrollIntoView({ block: "center" });
-  }, [chain.rows.length, id, expiry]);
+  // The money row in the middle of the view, once per chain, as it is drawn.
+  const scrolledFor = useRef("");
+  useLayoutEffect(() => {
+    if (!chain.ready || !chain.scrollKey || scrolledFor.current === chain.scrollKey) return;
+    const box = scroller.current;
+    const atm = box?.querySelector<HTMLElement>(".mh-atm");
+    if (box && atm) {
+      box.scrollTop = atm.offsetTop - box.clientHeight / 2 + atm.offsetHeight / 2;
+      scrolledFor.current = chain.scrollKey;
+    }
+  }, [chain.ready, chain.scrollKey, chain.rows]);
+
+  // The forward for IV: call - put + strike at the money, settled to once a second so IV does not
+  // redraw every cell on every tick.
+  const atmRow = chain.rows.find((r) => r.strike === chain.atm);
+  const atmCe = useQuote(atmRow?.callId ?? "");
+  const atmPe = useQuote(atmRow?.putId ?? "");
+  const forward = useSettled(atmRow && atmCe !== undefined && atmPe !== undefined ? atmCe - atmPe + atmRow.strike : null, 1000);
+  const mcx = id.startsWith("mcx:");
+  const years = Math.round(yearsToExpiry(expiry, mcx) * 525_600) / 525_600;
 
   const exchange = id ? id.split(":")[0]!.toUpperCase() : "";
-  const spotAt = chain.spot === null ? -1 : chain.rows.findIndex((r) => r.strike > chain.spot!);
 
   return (
     <div className="mh-chain" ref={box} data-narrow={narrow || undefined}>
@@ -149,7 +164,7 @@ export function ChainPanel({
             ref={input}
             className="mh-chain-input"
             value={query}
-            placeholder={pick ? `${pick.underlying.name}  ${exchange}` : "Search: nifty, sensex, crudeoil"}
+            placeholder={pick ? "" : "Search: nifty, sensex, crudeoil"}
             spellCheck={false}
             autoComplete="off"
             onChange={(e) => {
@@ -176,6 +191,11 @@ export function ChainPanel({
             aria-expanded={results.length > 0}
             aria-label="Search an underlying"
           />
+          {pick && !query ? (
+            <span className="mh-chain-subject" aria-hidden>
+              {pick.underlying.name} <span className="mh-chip">{exchange}</span>
+            </span>
+          ) : null}
           {query ? (
             <button type="button" className="mh-chain-clear" aria-label="Clear" onClick={() => setQuery("")}>
               <CloseIcon size={12} />
@@ -219,7 +239,11 @@ export function ChainPanel({
           />
         ) : null}
         <span className="mh-spacer" />
-        {chain.spot !== null ? <span className="mh-chain-spot">{fmt2(chain.spot)}</span> : null}
+        {chain.spot !== null ? (
+          <span className="mh-chain-spot">
+            {pick?.underlying.name} <b>{fmt2(chain.spot)}</b>
+          </span>
+        ) : null}
       </div>
 
       {!pick ? (
@@ -239,65 +263,60 @@ export function ChainPanel({
           <div className="mh-empty-title">Nothing to show</div>
           <div className="mh-empty-text">{chain.error}</div>
         </div>
+      ) : !chain.ready ? (
+        <div className="mh-chain-wait" aria-busy>
+          <Spinner size={18} />
+          <span>
+            {chain.waiting === "Loading prices" ? `Loading ${pick.underlying.name} ${shortDate(expiry)} prices` : `${chain.waiting}${chain.waiting === "Finding the price" ? ` of ${pick.underlying.name}` : ""}`}
+          </span>
+          {chain.total > 0 ? (
+            <span className="mh-chain-progress">
+              {chain.priced} of {chain.total}
+            </span>
+          ) : null}
+        </div>
       ) : (
         <>
-          <div className="mh-chain-head" role="row">
-            {narrow ? null : <span>IV</span>}
-            <span>LTP</span>
-            <span className="mh-chain-mid">Strike</span>
-            <span className="mh-chain-mid mh-chain-straddle">Straddle</span>
-            <span className="mh-chain-mid" />
-            <span className="mh-chain-put">LTP</span>
-            {narrow ? null : <span className="mh-chain-put">IV</span>}
-          </div>
-          <div className="mh-chain-body">
-            {chain.rows.length === 0 ? <div className="mh-chain-wait">{chain.loading ? "Loading the strikes…" : "Waiting for prices…"}</div> : null}
-            {chain.rows.map((r, i) => {
-              const colour = colourOf.get(r.strike);
-              const isAtm = r.strike === chain.atm;
-              const on = isAtm || colour !== undefined;
-              const shownColour = isAtm ? ATM_COLOUR : colour;
-              return (
-                <div key={r.strike}>
-                  {i === spotAt ? (
-                    <div className="mh-chain-spotrow" ref={spotRow}>
-                      <span />
-                      <b>
-                        {pick.underlying.name} {fmt2(chain.spot!)}
-                      </b>
-                      <span />
-                    </div>
-                  ) : null}
-                  <div className={on ? "mh-chain-row mh-picked" : "mh-chain-row"} role="row">
-                    {narrow ? null : <span className={chain.spot !== null && r.strike < chain.spot ? "mh-itm" : undefined}>{iv(r.ceIv)}</span>}
-                    <span className={chain.spot !== null && r.strike < chain.spot ? "mh-itm mh-ltp" : "mh-ltp"}>{r.ce === null ? "—" : fmt2(r.ce)}</span>
-                    <span className="mh-chain-mid mh-strike">
-                      {r.strike.toLocaleString("en-IN")}
-                      {isAtm ? <em>ATM</em> : null}
-                    </span>
-                    <span className="mh-chain-mid mh-chain-straddle">
-                      <i style={{ background: shownColour ?? "transparent" }} />
-                      {r.straddle === null ? "—" : fmt2(r.straddle)}
-                    </span>
-                    <span className="mh-chain-mid">
-                      <button
-                        type="button"
-                        className="mh-chain-pick"
-                        aria-pressed={on}
-                        disabled={isAtm || (full && !on)}
-                        style={shownColour ? { color: shownColour } : undefined}
-                        aria-label={`${on ? "Remove" : "Add"} the ${r.strike} straddle`}
-                        onClick={() => togglePick(id, expiry, r.strike)}
-                      >
-                        {on ? <CheckIcon size={11} /> : <PlusIcon size={11} />}
-                      </button>
-                    </span>
-                    <span className={chain.spot !== null && r.strike > chain.spot ? "mh-itm mh-ltp mh-chain-put" : "mh-ltp mh-chain-put"}>{r.pe === null ? "—" : fmt2(r.pe)}</span>
-                    {narrow ? null : <span className={chain.spot !== null && r.strike > chain.spot ? "mh-itm mh-chain-put" : "mh-chain-put"}>{iv(r.peIv)}</span>}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="mh-chain-scroll" ref={scroller}>
+            <table className="mh-chain-table">
+              <colgroup>
+                {narrow ? null : <col className="mh-col-iv" />}
+                <col />
+                <col className="mh-col-strike" />
+                <col className="mh-col-straddle" />
+                <col className="mh-col-add" />
+                <col />
+                {narrow ? null : <col className="mh-col-iv" />}
+              </colgroup>
+              <thead>
+                <tr>
+                  {narrow ? null : <th className="mh-th-ce">Call IV</th>}
+                  <th className="mh-th-ce">Call LTP</th>
+                  <th>Strike</th>
+                  <th className="mh-th-ce">Straddle</th>
+                  <th />
+                  <th className="mh-th-pe">Put LTP</th>
+                  {narrow ? null : <th className="mh-th-pe">Put IV</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {chain.rows.map((row) => (
+                  <Row
+                    key={row.strike}
+                    row={row}
+                    atm={row.strike === chain.atm}
+                    ceItm={chain.spot !== null && row.strike < chain.spot}
+                    peItm={chain.spot !== null && row.strike > chain.spot}
+                    narrow={narrow}
+                    colour={row.strike === chain.atm ? ATM_COLOUR : colourOf.get(row.strike)}
+                    disabled={full}
+                    forward={forward}
+                    years={years}
+                    onToggle={toggle}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
           <div className="mh-chain-foot">
             <span>
@@ -313,3 +332,88 @@ export function ChainPanel({
     </div>
   );
 }
+
+/** A value that follows `value` at most once per `ms`. */
+function useSettled<T>(value: T, ms: number): T {
+  const [shown, setShown] = useState(value);
+  const last = useRef(0);
+  useEffect(() => {
+    const wait = Math.max(0, ms - (Date.now() - last.current));
+    const timer = setTimeout(() => {
+      last.current = Date.now();
+      setShown(value);
+    }, wait);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return shown;
+}
+
+const money = (v: number | undefined) => (v === undefined ? "—" : fmt2(v));
+const vol = (v: number | null) => (v === null ? "—" : v.toFixed(1));
+
+/**
+ * One strike. Each price cell reads only its own contract from the quote store, so a tick redraws
+ * this row and no other; the row is memoised on plain values, so the table is not redrawn by it.
+ */
+const Row = memo(function Row({
+  row,
+  atm,
+  ceItm,
+  peItm,
+  narrow,
+  colour,
+  disabled,
+  forward,
+  years,
+  onToggle,
+}: Readonly<{
+  row: ChainRow;
+  atm: boolean;
+  ceItm: boolean;
+  peItm: boolean;
+  narrow: boolean;
+  /** The straddle's colour on the chart when it is on it. */
+  colour: string | undefined;
+  /** Five on the chart already: no more can be added. */
+  disabled: boolean;
+  forward: number | null;
+  years: number;
+  onToggle: (strike: number) => void;
+}>) {
+  const ce = useQuote(row.callId);
+  const pe = useQuote(row.putId);
+  const straddle = ce !== undefined && pe !== undefined ? ce + pe : null;
+  const ceIv = forward !== null && ce !== undefined ? impliedVol(ce, forward, row.strike, years, true) : null;
+  const peIv = forward !== null && pe !== undefined ? impliedVol(pe, forward, row.strike, years, false) : null;
+  const on = atm || colour !== undefined;
+  return (
+    <tr className={atm ? "mh-atm" : undefined}>
+      {narrow ? null : <td className={ceItm ? "mh-ce mh-itm mh-quiet" : "mh-ce mh-quiet"}>{vol(ceIv)}</td>}
+      <td className={ceItm ? "mh-ce mh-itm" : "mh-ce"}>
+        <span className="mh-ltp">{money(ce)}</span>
+      </td>
+      <td className="mh-strike">{row.strike.toLocaleString("en-IN")}</td>
+      <td className="mh-straddle">
+        <i style={{ background: on ? colour : "transparent" }} />
+        <span className={on ? "mh-on" : undefined}>{straddle === null ? "—" : fmt2(straddle)}</span>
+      </td>
+      <td className="mh-add">
+        <button
+          type="button"
+          className="mh-chain-pick"
+          aria-pressed={on}
+          disabled={atm || (disabled && !on)}
+          style={on && colour ? { color: colour } : undefined}
+          aria-label={`${on ? "Remove" : "Add"} the ${row.strike} straddle`}
+          onClick={() => onToggle(row.strike)}
+        >
+          {on ? <CheckIcon size={11} /> : <PlusIcon size={11} />}
+        </button>
+      </td>
+      <td className={peItm ? "mh-pe mh-itm" : "mh-pe"}>
+        <span className="mh-ltp">{money(pe)}</span>
+      </td>
+      {narrow ? null : <td className={peItm ? "mh-pe mh-itm mh-quiet" : "mh-pe mh-quiet"}>{vol(peIv)}</td>}
+    </tr>
+  );
+});

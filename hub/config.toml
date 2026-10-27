@@ -11,7 +11,7 @@ bind = "127.0.0.1:8080"
 require_keys = false
 # Per visitor IP. Generous: several people on one mobile network share an IP.
 # max_updates_per_sec = 0: every update is sent the moment it is ready (no throttle delay).
-guest = { max_connections = 20, max_topics = 50, history_days_per_minute = 120, max_updates_per_sec = 0 }
+guest = { max_connections = 20, max_topics = 120, history_days_per_minute = 120, max_updates_per_sec = 0 }
 # CPU threads the hub uses. Default: all cores. Set e.g. 2 to leave room for other programs.
 # worker_threads = 2
 # Browsers may open /ws only from this hub's own website. To let another site's

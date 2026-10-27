@@ -400,6 +400,27 @@ fn check_instruments() -> anyhow::Result<()> {
     })
 }
 
+/// `--chain <underlying> [expiry]`: reads the instrument file on disk (no network, no broker) and
+/// prints how many strikes each of the next expiries has and where they start and end.
+fn show_chain() -> anyhow::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let at = args.iter().position(|a| a == "--chain").unwrap_or(0);
+    let id = args.get(at + 1).ok_or_else(|| anyhow::anyhow!("usage: --chain <underlying>, e.g. --chain bse:sensex"))?;
+    let config = find_config()?;
+    let dir = config.canonicalize()?.parent().map(|d| d.join("data").join("instruments")).unwrap_or_default();
+    let inst = instruments::Instruments::new(dir);
+    let c = canonical::Canonical::parse(id).map_err(anyhow::Error::msg)?;
+    let u = inst.get(c.market(), &c.name_upper()).ok_or_else(|| anyhow::anyhow!("{id}: not found in the instrument lists"))?;
+    println!("{}: {} expiries, lot {}", u.id, u.expiries.len(), u.lot);
+    for exp in u.expiries.iter().take(5) {
+        let chain = inst.chain(u.market, &u.name, *exp)?;
+        let strikes: Vec<f64> = chain.iter().map(|s| s.strike).collect();
+        let step = if strikes.len() > 1 { strikes[1] - strikes[0] } else { 0.0 };
+        println!("  {exp}: {} strikes, {:?} .. {:?}, first step {step}", strikes.len(), strikes.first(), strikes.last());
+    }
+    Ok(())
+}
+
 /// CPU threads for the hub: `worker_threads` in config.toml, else one per CPU core.
 fn worker_threads() -> usize {
     let configured = find_config()
@@ -417,6 +438,9 @@ fn main() -> anyhow::Result<()> {
     }
     if std::env::args().any(|a| a == "--instruments") {
         return check_instruments();
+    }
+    if std::env::args().any(|a| a == "--chain") {
+        return show_chain();
     }
     // Without the window feature there is nothing else to be.
     let headless = !cfg!(feature = "gui") || std::env::args().any(|a| a == "--headless");
