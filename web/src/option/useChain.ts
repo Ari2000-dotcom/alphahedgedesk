@@ -125,12 +125,19 @@ function nearest(strikes: readonly Strike[], spot: number): number {
   return best;
 }
 
-/** The `total` row indices nearest the [first, last] band, closest first; `total` itself once that covers it all. */
-function nearViewed(total: number, first: number, last: number, budget: number): number[] {
+/**
+ * The `budget` row indices nearest the [first, last] band, or every row once that covers them all.
+ * `pin`, when given and not already among them, replaces the one picked row furthest from the
+ * band — the set stays exactly `budget` long, so pinning a row never asks the hub for one more
+ * than it already allows.
+ */
+function nearViewed(total: number, first: number, last: number, budget: number, pin?: number): number[] {
   if (budget >= total) return Array.from({ length: total }, (_, i) => i);
   const dist = (i: number) => (i < first ? first - i : i > last ? i - last : 0);
   const order = Array.from({ length: total }, (_, i) => i).sort((a, b) => dist(a) - dist(b) || a - b);
-  return order.slice(0, budget).sort((a, b) => a - b);
+  const picked = order.slice(0, budget);
+  if (pin !== undefined && !picked.includes(pin)) picked[picked.length - 1] = pin;
+  return picked.sort((a, b) => a - b);
 }
 
 export function useChain(hub: Hub, underlying: string, expiry: string): ChainState {
@@ -234,10 +241,8 @@ export function useChain(hub: Hub, underlying: string, expiry: string): ChainSta
   // unlimited, so scrolling an ordinary chain never re-triggers the subscribe effect below.
   const ids = useMemo(() => {
     if (rowBudget >= window.length) return fullIds;
-    const rowsLive = nearViewed(window.length, viewFirst, viewLast, rowBudget);
-    const money = spot !== null && window.length > 0 ? nearest(window, spot) : -1;
-    if (money >= 0 && !rowsLive.includes(money)) rowsLive.push(money);
-    return rowsLive.flatMap((i) => [window[i]!.call, window[i]!.put]);
+    const money = spot !== null && window.length > 0 ? nearest(window, spot) : undefined;
+    return nearViewed(window.length, viewFirst, viewLast, rowBudget, money).flatMap((i) => [window[i]!.call, window[i]!.put]);
   }, [window, fullIds, rowBudget, viewFirst, viewLast, spot]);
 
   // The live legs: one batched subscribe; prices go straight to the quote store. A leg dropped from
