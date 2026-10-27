@@ -1,0 +1,62 @@
+name: Deploy web to the VPS
+
+# A push that changes the website builds it and puts it on the VPS. Caddy serves the web\ folder
+# from disk, so nothing is restarted. The old site is kept as web.old for a one-step rollback.
+# Needs four repository secrets (Settings > Secrets and variables > Actions):
+#   VPS_HOST      alphahedgedesk.duckdns.org
+#   VPS_USER      Administrator
+#   VPS_PATH      the MarketHub folder on the VPS, with forward slashes, e.g. C:/MarketHub
+#   VPS_SSH_KEY   the private key whose public half is on the VPS (see the setup steps)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      HOST: ${{ secrets.VPS_HOST }}
+      USER: ${{ secrets.VPS_USER }}
+      DEST: ${{ secrets.VPS_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload next to the live site
+        run: |
+          SSH="ssh -i $HOME/.ssh/deploy -o BatchMode=yes $USER@$HOST"
+          $SSH "powershell -NoProfile -Command \"Remove-Item -Recurse -Force '$DEST/web.new' -ErrorAction SilentlyContinue\""
+          scp -i "$HOME/.ssh/deploy" -o BatchMode=yes -r web/dist "$USER@$HOST:$DEST/web.new"
+
+      - name: Switch over, keeping the old site
+        run: |
+          ssh -i "$HOME/.ssh/deploy" -o BatchMode=yes "$USER@$HOST" "powershell -NoProfile -Command \"\$ErrorActionPreference='Stop'; Set-Location '$DEST'; if (-not (Test-Path 'web.new\\index.html')) { throw 'upload incomplete' }; if (Test-Path 'web.old') { Remove-Item -Recurse -Force 'web.old' }; if (Test-Path 'web') { Rename-Item 'web' 'web.old' }; Rename-Item 'web.new' 'web'\""
