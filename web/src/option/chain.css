@@ -256,3 +256,9 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.mh-chain-note {
+  padding: 10px 12px;
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+}

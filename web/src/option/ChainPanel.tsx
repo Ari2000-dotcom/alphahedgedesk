@@ -47,6 +47,8 @@ export function ChainPanel({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Underlying[]>([]);
   const [active, setActive] = useState(0);
+  /** What the search is doing, so the box never looks dead: "", searching, none, or an error. */
+  const [note, setNote] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const [connected, setConnected] = useState(hub.state === "open");
   const [narrow, setNarrow] = useState(false);
@@ -69,16 +71,36 @@ export function ChainPanel({
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2 || !connected) {
+    if (q.length === 0) {
       setResults([]);
+      setNote("");
+      return;
+    }
+    if (q.length < 2) {
+      setResults([]);
+      setNote("Type at least 2 letters");
+      return;
+    }
+    if (!connected) {
+      setResults([]);
+      setNote("Not connected to the hub yet");
       return;
     }
     let cancelled = false;
+    setNote("Searching…");
     const timer = setTimeout(() => {
       hub
-        .request<{ results: Underlying[] }>({ op: "search", q }, "search")
-        .then((r) => !cancelled && setResults(r.results))
-        .catch(() => !cancelled && setResults([]));
+        .request<{ results: Underlying[] }>({ op: "search", q }, "search", 20_000)
+        .then((r) => {
+          if (cancelled) return;
+          setResults(r.results);
+          setNote(r.results.length === 0 ? `No underlying matches “${q}”` : "");
+        })
+        .catch((e: Error) => {
+          if (cancelled) return;
+          setResults([]);
+          setNote(`Search failed: ${e.message}`);
+        });
     }, 200);
     return () => {
       cancelled = true;
@@ -158,6 +180,11 @@ export function ChainPanel({
             <button type="button" className="mh-chain-clear" aria-label="Clear" onClick={() => setQuery("")}>
               <CloseIcon size={12} />
             </button>
+          ) : null}
+          {results.length === 0 && note ? (
+            <div className="mh-menu mh-chain-results mh-chain-note" role="status">
+              {note}
+            </div>
           ) : null}
           {results.length > 0 ? (
             <ul className="mh-menu mh-chain-results" role="listbox">
