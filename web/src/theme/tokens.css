@@ -1,0 +1,367 @@
+/*
+ * MarketHub design tokens, once: AlphaHedge's palette.
+ *
+ * Warm neutral greys, text never pure white, one brand hue (a muted gold) for
+ * the mark, the current screen and the focus ring only. The one primary action
+ * is an ink button, not a colour. Up and down are a sage green and a
+ * terracotta, softened so a screen full of moves does not shout.
+ *
+ * CANVAS TONES (AlphaHedge's): `data-canvas` on <html> picks the ground
+ * (core/canvas.ts owns it; the palette button in the title bar picks it). Each
+ * tone moves its whole ladder together: the chrome block on top (title bar,
+ * page header), the plate the chart sits on (`--mh-bg`), the workspace around
+ * it, the surfaces, both rules and the four text tiers. Plain `[data-canvas]`
+ * selectors, so the picker's swatches can set the attribute on themselves and
+ * be painted by this same file.
+ *
+ * The chart engine (chart/lite, from QuantDesk) reads `--qd-*` names; they are
+ * pointed at this ladder at the foot of the file.
+ */
+
+/*
+ * OpenAlgo: openalgo-charts' own dark theme and site, and the default. Near-black #0d0e12
+ * charts with a deep navy grid, set in cards behind a #1e2334 edge on a darker page;
+ * cool blue-grey text (#8b91a7 on the axes).
+ */
+:root,
+[data-canvas="openalgo"] {
+  --mh-chrome: #0a0b0f;
+  --mh-well: #08090c;
+  --mh-workspace: #07080b;
+  --mh-bg: #0d0e12;
+  --mh-head: #12141b;
+  --mh-surface-1: #12141b;
+  --mh-surface-2: #1a1e2b;
+  --mh-surface-3: #252a3a;
+  --mh-line: #1a1f2d;
+  --mh-line-strong: #30374f;
+  --mh-plate-edge: #242a3e;
+  --mh-strip-edge: #242a3e;
+  --mh-chart-grid: #1a1f2d;
+  --mh-hover-wash: rgb(120 150 255 / 6%);
+  --mh-text-strong: #eef0f6;
+  --mh-text-primary: #ced2de;
+  --mh-text-secondary: #aeb4c6;
+  --mh-text-tertiary: #959bb2;
+  --mh-text-disabled: #646a82;
+}
+
+/*
+ * Charcoal: the default. A lighter grey ground (`--mh-workspace`) with dark containers
+ * (`--mh-bg`) lifted off it by a 6px gutter, a thin edge and a rounded corner, and a darker
+ * title bar of its own. Text is regular weight only; emphasis is brightness, so the four text
+ * tiers are spread wide and the strongest is near white.
+ */
+[data-canvas="charcoal"] {
+  --mh-chrome: #121214;
+  --mh-well: #141416;
+  --mh-workspace: #2b2b30;
+  --mh-bg: #1a1a1d;
+  --mh-head: #1f1f23;
+  --mh-surface-1: #25252a;
+  --mh-surface-2: #303036;
+  --mh-surface-3: #3a3a40;
+  --mh-line: #2c2c31;
+  --mh-line-strong: #3a3a40;
+  --mh-plate-edge: #34343a;
+  --mh-strip-edge: #3a3a40;
+  --mh-chart-grid: #25252a;
+  --mh-hover-wash: rgb(255 255 255 / 4%);
+  --mh-text-strong: #f6f6f7;
+  --mh-text-primary: #cfcfd4;
+  --mh-text-secondary: #b4b4b8;
+  --mh-text-tertiary: #9b9ba2;
+  --mh-text-disabled: #6c6c73;
+}
+
+/*
+ * QuantDesk: the desk's own ground. Kite's neutral #181818
+ * containers lift off a lighter #272727 workspace behind a #343434 edge; the
+ * nav bar is QuantDesk's #242424 chrome. Text is Apple's named greys, each
+ * chosen for its band on #181818.
+ */
+[data-canvas="quantdesk"] {
+  --mh-chrome: #242424;
+  --mh-well: #131415;
+  --mh-workspace: #272727;
+  --mh-bg: #181818;
+  --mh-head: #222222;
+  --mh-surface-1: #1e1e1e;
+  --mh-surface-2: #2b2b2b;
+  --mh-surface-3: #3a3a3a;
+  --mh-line: #262626;
+  --mh-line-strong: #343434;
+  --mh-plate-edge: #343434;
+  --mh-strip-edge: #3a3a3a;
+  --mh-hover-wash: rgb(255 255 255 / 5%);
+  --mh-text-strong: #e8e8ed;
+  --mh-text-primary: #c7c7cc;
+  --mh-text-secondary: #a1a1a6;
+  --mh-text-tertiary: #86868b;
+  --mh-text-disabled: #636366;
+}
+
+/* Graphite: warm charcoal, a trace of brown (AlphaHedge's default). */
+[data-canvas="graphite"] {
+  --mh-chrome: #121110;
+  --mh-well: #0c0b0a;
+  --mh-workspace: #2a2723;
+  --mh-bg: #1d1b18;
+  --mh-head: #25231f;
+  --mh-surface-1: #22201c;
+  --mh-surface-2: #2d2a26;
+  --mh-surface-3: #3a3631;
+  --mh-line: #2c2925;
+  --mh-line-strong: #3f3b35;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #3f3b35;
+  --mh-hover-wash: rgb(255 225 190 / 4%);
+  --mh-text-strong: #e7e3dc;
+  --mh-text-primary: #cfcac2;
+  --mh-text-secondary: #aea9a0;
+  --mh-text-tertiary: #958f87;
+  --mh-text-disabled: #67625b;
+}
+
+/* Neutral: flat grey, no hue at all. */
+[data-canvas="neutral"] {
+  --mh-chrome: #111111;
+  --mh-well: #0b0b0b;
+  --mh-workspace: #292929;
+  --mh-bg: #1b1b1b;
+  --mh-head: #232323;
+  --mh-surface-1: #202020;
+  --mh-surface-2: #2b2b2b;
+  --mh-surface-3: #383838;
+  --mh-line: #2a2a2a;
+  --mh-line-strong: #3d3d3d;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #3d3d3d;
+  --mh-hover-wash: rgb(255 255 255 / 4%);
+  --mh-text-strong: #e6e6e6;
+  --mh-text-primary: #cecece;
+  --mh-text-secondary: #acacac;
+  --mh-text-tertiary: #939393;
+  --mh-text-disabled: #656565;
+}
+
+/* Slate: cool blue-grey, the tone most terminals settle on. */
+[data-canvas="slate"] {
+  --mh-chrome: #0e1217;
+  --mh-well: #0a0d11;
+  --mh-workspace: #262e3a;
+  --mh-bg: #19202a;
+  --mh-head: #202834;
+  --mh-surface-1: #1e2530;
+  --mh-surface-2: #29323f;
+  --mh-surface-3: #353f4f;
+  --mh-line: #29313d;
+  --mh-line-strong: #3b4555;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #3b4555;
+  --mh-hover-wash: rgb(150 190 255 / 5%);
+  --mh-text-strong: #e1e6ed;
+  --mh-text-primary: #c8ced7;
+  --mh-text-secondary: #a5adb9;
+  --mh-text-tertiary: #929ba8;
+  --mh-text-disabled: #606976;
+}
+
+/* Ink: deep navy, the clearest step away from grey. */
+[data-canvas="ink"] {
+  --mh-chrome: #0b0e18;
+  --mh-well: #080a12;
+  --mh-workspace: #212940;
+  --mh-bg: #151b2e;
+  --mh-head: #1c2339;
+  --mh-surface-1: #1a2034;
+  --mh-surface-2: #262e48;
+  --mh-surface-3: #313b58;
+  --mh-line: #252d45;
+  --mh-line-strong: #36405e;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #36405e;
+  --mh-hover-wash: rgb(140 170 255 / 6%);
+  --mh-text-strong: #e0e4f0;
+  --mh-text-primary: #c6cbda;
+  --mh-text-secondary: #a4abbf;
+  --mh-text-tertiary: #8e96ac;
+  --mh-text-disabled: #5e657b;
+}
+
+/* Moss: green-grey at low saturation. */
+[data-canvas="moss"] {
+  --mh-chrome: #0e120f;
+  --mh-well: #0a0d0a;
+  --mh-workspace: #252e27;
+  --mh-bg: #18201a;
+  --mh-head: #1f2921;
+  --mh-surface-1: #1d251f;
+  --mh-surface-2: #28322a;
+  --mh-surface-3: #333f36;
+  --mh-line: #273129;
+  --mh-line-strong: #38443b;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #38443b;
+  --mh-hover-wash: rgb(170 235 190 / 4%);
+  --mh-text-strong: #e2e7e1;
+  --mh-text-primary: #c9cfc7;
+  --mh-text-secondary: #a7aea5;
+  --mh-text-tertiary: #939a91;
+  --mh-text-disabled: #60675e;
+}
+
+/* Plum: violet-charcoal. */
+[data-canvas="plum"] {
+  --mh-chrome: #120f15;
+  --mh-well: #0d0b10;
+  --mh-workspace: #2c2535;
+  --mh-bg: #1f1a26;
+  --mh-head: #27202f;
+  --mh-surface-1: #241e2c;
+  --mh-surface-2: #2f2839;
+  --mh-surface-3: #3b3347;
+  --mh-line: #2e2738;
+  --mh-line-strong: #40374d;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #40374d;
+  --mh-hover-wash: rgb(215 180 255 / 5%);
+  --mh-text-strong: #e7e2eb;
+  --mh-text-primary: #cfc9d4;
+  --mh-text-secondary: #aea7b5;
+  --mh-text-tertiary: #958e9c;
+  --mh-text-disabled: #675f6e;
+}
+
+/* A tone change swaps the palette in one step: without this every hover
+   transition fades from the old tone while the rest has already moved. */
+[data-canvas-switching] *,
+[data-canvas-switching] *::before,
+[data-canvas-switching] *::after {
+  transition: none !important;
+}
+
+:root {
+  color-scheme: dark;
+  /* -- the desk (theme/dock.css): QuantDesk's dock measures and its two accents -------- */
+  --mh-dock-tab-h: 28px;
+  /* AlphaHedge's plate idea: a gap of workspace between containers, a card's corner. */
+  --mh-dock-gutter: 6px;
+  --mh-dock-radius: 8px;
+  /* The splitter lit, and a drop target: an interaction cue, never the identity accent. */
+  --mh-dock-accent: #4987ee;
+  --mh-frame: color-mix(in srgb, var(--mh-text-tertiary) 55%, var(--mh-bg));
+  --mh-chart-grid: var(--mh-line);
+
+  /* Depth without blur for controls; menus get one soft drop to float. */
+  --mh-raise-1: 0 1px 0 rgb(0 0 0 / 40%);
+  --mh-shadow-pop: 0 2px 0 rgb(0 0 0 / 35%), 0 0 0 1px rgb(0 0 0 / 30%), 0 14px 32px rgb(0 0 0 / 45%);
+
+  /* -- brand: the mark, the current screen, the focus ring --------------- */
+  --mh-brand: #c9a45c;
+  --mh-brand-rgb: 201 164 92;
+  --mh-focus: #c9a45c;
+
+  /* -- the one primary action: ink on the dark ground --------------------- */
+  --mh-primary-bg: #e2e0da;
+  --mh-primary-hover: #eeece7;
+  --mh-primary-pressed: #d0cdc6;
+  --mh-primary-text: #151514;
+
+  /* -- data colours mean data: never actions or warnings ----------------- */
+  --mh-up: #22ab94;
+  --mh-down: #f7525f;
+
+  /* -- status: the hub's state, never a move ------------------------------ */
+  --mh-status-ok: #62b58e;
+  --mh-status-busy: #c9a45c;
+  --mh-status-error: #e0675c;
+  --mh-amber: #d89a48;
+  --mh-amber-rgb: 216 154 72;
+  --mh-error-text: #e8776a;
+  --mh-error-rgb: 224 103 92;
+
+  /* -- the chart's lines: QuantDesk's ATM overlay series, at full strength,
+     all solid; told apart by colour and weight (the premium heaviest, spot a
+     thin grey guide under the rest). */
+  --mh-line-fut: #6cb2ff;
+  --mh-line-spot: #a9a9b2;
+  --mh-line-straddle: #ff7ac6;
+  --mh-line-vwap: #f0dc4e;
+  --mh-line-iv: #ffb547;
+  --mh-line-vix: #3be0d3;
+
+  /* -- the chart's own furniture: axis numbers, crosshair, the tooltip's glass */
+  --mh-chart-axis-text: var(--mh-text-secondary);
+  --mh-chart-crosshair: var(--mh-text-tertiary);
+  --mh-tip-glass: color-mix(in srgb, var(--mh-surface-1) 82%, transparent);
+  --mh-tip-edge: color-mix(in srgb, var(--mh-line-strong) 80%, transparent);
+  --mh-tip-shadow: 0 6px 20px rgb(0 0 0 / 50%), 0 1px 3px rgb(0 0 0 / 40%);
+
+  /* -- a container's header strip (QuantDesk's): its height, and the crisp
+     three-row cast under its rule, never a blur. ----------------------- */
+  --mh-strip-h: 36px;
+  --mh-strip-cast: linear-gradient(to bottom, rgb(0 0 0 / 34%) 0 1px, rgb(0 0 0 / 18%) 1px 2px, rgb(0 0 0 / 7%) 2px 3px);
+
+  /* -- type ------------------------------------------------------------ */
+  --mh-font: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mh-weight-regular: 400;
+  /* No bold anywhere: emphasis is brightness, not weight. */
+  --mh-weight-emphasis: 400;
+  --mh-size-micro: 11px;
+  --mh-size-caption: 12px;
+  --mh-size-control: 13px;
+  --mh-size-body: 14px;
+  --mh-size-title: 15px;
+  --mh-size-figure: 18px;
+  --mh-size-display: 24px;
+  --mh-tracking-auto: calc(0.55px - 0.055em);
+
+  /* -- shape and size --------------------------------------------------- */
+  --mh-radius-small: 4px;
+  --mh-radius: 6px;
+  --mh-radius-card: 10px;
+  --mh-radius-pill: 980px;
+  --mh-control-h: 28px;
+  --mh-titlebar-h: 48px;
+  --mh-header-h: 60px;
+  --mh-page-pad: 20px;
+
+  /* -- motion ------------------------------------------------------------ */
+  --mh-ease: cubic-bezier(0.4, 0, 0.6, 1);
+  --mh-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --mh-dur-fast: 100ms;
+  --mh-dur: 150ms;
+  --mh-dur-pop: 110ms;
+  --mh-dur-spin: 800ms;
+
+  /* -- the chart engine's names, on this ladder ------------------------- */
+  --qd-font: var(--mh-font);
+  --qd-size-micro: var(--mh-size-micro);
+  --qd-size-caption: var(--mh-size-caption);
+  --qd-dur: var(--mh-dur);
+  --qd-ease-out: var(--mh-ease-out);
+  --qd-focus: var(--mh-focus);
+  --qd-text-strong: var(--mh-text-strong);
+  --qd-text-primary: var(--mh-text-primary);
+  --qd-text-secondary: var(--mh-text-secondary);
+  --qd-text-tertiary: var(--mh-text-tertiary);
+  --qd-chart-bg: var(--mh-bg);
+  --qd-chart-frame-bg: var(--mh-bg);
+  --qd-chart-grid: var(--mh-line);
+  --qd-chart-grid-major: var(--mh-line-strong);
+  --qd-chart-edge: var(--mh-line);
+  --qd-chart-label-minor: var(--mh-text-tertiary);
+  --qd-chart-crosshair: var(--mh-text-tertiary);
+  --qd-chart-tag-bg: var(--mh-text-strong);
+  --qd-chart-tag-text: var(--mh-bg);
+  --qd-chart-ink-dark: #151514;
+  --qd-chart-ink-light: #f2f0eb;
+  --qd-chart-up: var(--mh-up);
+  --qd-chart-down: var(--mh-down);
+  --qd-series-1: var(--mh-line-fut);
+  --qd-series-2: var(--mh-line-iv);
+  --qd-series-3: var(--mh-line-vix);
+  --qd-series-4: var(--mh-line-straddle);
+  --qd-series-5: var(--mh-line-vwap);
+}

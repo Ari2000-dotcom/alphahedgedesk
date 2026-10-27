@@ -1,0 +1,101 @@
+/* The chips row over a straddle chart: the straddles on it, "Add straddle", the line toggles. */
+
+.mh-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--mh-line);
+}
+.mh-chipbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px 0 9px;
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-surface-1);
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-caption);
+  font-variant-numeric: tabular-nums;
+}
+.mh-chipbox > i {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+.mh-chipbox > em {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--mh-surface-3);
+  color: var(--mh-text-secondary);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 14px;
+}
+.mh-chipbox:not(:has(.mh-chipbox-x)) {
+  padding-right: 9px;
+}
+.mh-chipbox-x {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+}
+.mh-chipbox-x:hover {
+  background: var(--mh-surface-3);
+  color: var(--mh-text-strong);
+}
+.mh-chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px dashed var(--mh-surface-3);
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+  cursor: pointer;
+}
+.mh-chip-add span {
+  color: var(--mh-text-tertiary);
+}
+.mh-chip-add:hover:not(:disabled) {
+  color: var(--mh-text-strong);
+}
+.mh-chip-add:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mh-overlay {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+  cursor: pointer;
+}
+.mh-overlay[aria-pressed="false"] {
+  color: var(--mh-text-disabled);
+}
+.mh-overlay[aria-pressed="false"] svg {
+  opacity: 0.35;
+}
+.mh-overlay:hover {
+  background: var(--mh-surface-1);
+}

@@ -1,0 +1,17 @@
+# HTTPS in front of MarketHub. Caddy gets and renews the certificate by itself.
+# 1. Point a domain (e.g. feed.yourdomain.com) at the VPS IP with a DNS "A" record.
+# 2. Replace feed.example.com below with it.
+# 3. Open ports 80 and 443 in the VPS firewall; keep 8080 closed.
+# 4. Run: caddy run --config Caddyfile   (or install Caddy as a service)
+# Users then connect to:  wss://feed.example.com/ws?key=THEIR_KEY
+#
+# Only the user endpoints are passed through. /admin and /stats stay reachable
+# from the VPS itself only.
+
+feed.example.com {
+	@user path /ws /history /straddle_history /health /auth
+	handle @user {
+		reverse_proxy 127.0.0.1:8080
+	}
+	respond 404
+}

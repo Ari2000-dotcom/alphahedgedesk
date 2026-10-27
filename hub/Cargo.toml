@@ -1,0 +1,46 @@
+[package]
+name = "hub"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["ws"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+async-trait = "0.1"
+rand = "0.8"
+dotenvy = "0.15"
+totp-rs = "5"
+# Instrument lists: Shoonya's zip files in, small zstd Parquet files on disk.
+parquet = { version = "53", default-features = false, features = ["arrow", "zstd"] }
+arrow-array = "53"
+arrow-schema = "53"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# Black-76 implied volatility: the same solver and revision QuantDesk uses, so both apps agree.
+black76_rust = { git = "https://github.com/marketcalls/opengreeks", rev = "98c18349673b51e0dbf4c7e76d74b84741bfc707" }
+memory-stats = "1"
+eframe = { version = "0.29", optional = true }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[features]
+# Desktop window. Server/VPS build without it (much less RAM):
+#   cargo build --release --no-default-features
+default = ["gui"]
+gui = ["dep:eframe"]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Console"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

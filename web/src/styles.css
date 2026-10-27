@@ -1,0 +1,1006 @@
+/*
+ * The page, styled once on the tokens in theme/tokens.css. QuantDesk's
+ * structure: the nav bar on top, then one container on the workspace, held off
+ * its edges by a narrow gutter. The container has one 36px header strip (what
+ * is drawn on the left, quiet readouts on the right) and the chart runs flush
+ * under it to the container's edges.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  letter-spacing: var(--mh-tracking-auto);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+}
+
+/* The shell never scrolls as a page: every scrolling region is inside a container that opts
+   into it. Without this, a sub-pixel rounding past 100% (a border, an outline, a transient
+   layout a frame behind a resize — fullscreen's own transition did this in Chrome) puts a
+   scrollbar on the page itself, which nothing here is built to have. */
+html,
+body {
+  overflow: hidden;
+}
+
+body {
+  background: var(--mh-workspace);
+  color: var(--mh-text-primary);
+  font-family: var(--mh-font);
+  font-size: var(--mh-size-control);
+  font-weight: var(--mh-weight-regular);
+  line-height: 1.25;
+  font-feature-settings: "tnum" 1, "cv11" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mh-focus);
+  outline-offset: 1px;
+}
+
+.mh-spacer {
+  flex: 1 1 auto;
+}
+.mh-up {
+  color: var(--mh-up);
+}
+.mh-down {
+  color: var(--mh-down);
+}
+
+.mh-spin {
+  animation: mh-spin var(--mh-dur-spin) linear infinite;
+}
+@keyframes mh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* -- the app frame --------------------------------------------------------- */
+
+.mh-app {
+  display: grid;
+  grid-template-rows: var(--mh-titlebar-h) minmax(0, 1fr);
+  height: 100%;
+}
+
+.mh-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Measured for dockview's explicit relayout on a fullscreen transition (shell/Workspace.tsx). */
+.mh-dock-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mh-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 8px 0 16px;
+  background: var(--mh-chrome);
+  border-bottom: 1px solid var(--mh-line-strong);
+}
+
+.mh-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 18px;
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-body);
+  font-weight: var(--mh-weight-emphasis);
+  white-space: nowrap;
+}
+
+.mh-nav {
+  display: flex;
+  align-self: stretch;
+}
+.mh-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-body);
+  font-weight: var(--mh-weight-emphasis);
+  white-space: nowrap;
+}
+.mh-nav-item:hover,
+.mh-nav-item[aria-current="page"] {
+  color: var(--mh-text-strong);
+}
+.mh-nav-item[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--mh-brand);
+}
+
+/* The indices: name quiet, price strong, the day's move in its colour. */
+.mh-ticker {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-right: 16px;
+  white-space: nowrap;
+}
+.mh-ticker-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--mh-size-caption);
+  font-variant-numeric: tabular-nums;
+}
+.mh-ticker-name {
+  color: var(--mh-text-tertiary);
+}
+.mh-ticker-price {
+  color: var(--mh-text-strong);
+}
+.mh-ticker-move {
+  color: var(--mh-text-tertiary);
+}
+.mh-ticker-move.mh-up {
+  color: var(--mh-up);
+}
+.mh-ticker-move.mh-down {
+  color: var(--mh-down);
+}
+/* Narrow windows give up the indices first, SENSEX before the rest. */
+@media (max-width: 1180px) {
+  .mh-ticker-item:nth-child(3) {
+    display: none;
+  }
+}
+@media (max-width: 960px) {
+  .mh-ticker {
+    display: none;
+  }
+}
+
+/* The hub's state: a dot and a word, set off by a rule. */
+.mh-feed {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 16px;
+  padding: 0 12px;
+  border-left: 1px solid var(--mh-line-strong);
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+}
+.mh-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mh-text-disabled);
+}
+.mh-dot.mh-ok {
+  background: var(--mh-status-ok);
+}
+.mh-dot.mh-busy {
+  background: var(--mh-status-busy);
+}
+.mh-dot.mh-error {
+  background: var(--mh-status-error);
+}
+
+/* -- buttons --------------------------------------------------------------- */
+
+.mh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--mh-control-h);
+  padding: 0 12px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius);
+  background: var(--mh-surface-1);
+  color: var(--mh-text-primary);
+  font-size: var(--mh-size-control);
+  font-weight: var(--mh-weight-emphasis);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease), border-color var(--mh-dur-fast) var(--mh-ease),
+    transform var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-btn:hover {
+  border-color: var(--mh-text-disabled);
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+}
+.mh-btn:active {
+  transform: scale(0.97);
+}
+.mh-btn:disabled {
+  cursor: default;
+  border-color: var(--mh-line);
+  background: transparent;
+  color: var(--mh-text-disabled);
+  transform: none;
+}
+
+.mh-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-icon-btn:hover,
+.mh-icon-btn[aria-expanded="true"] {
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+}
+.mh-icon-btn.mh-small {
+  width: 22px;
+  height: 22px;
+}
+
+/* -- the page: one container on the workspace ------------------------------- */
+
+.mh-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+/* A straddle's body inside its dock container: the strip, then the chart. The plate, its
+   corner and its outline are the container's (theme/dock.css). */
+.mh-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--mh-bg);
+}
+
+/* A dashed frame (each chart legend's when asked for): a fine rule drawn as an SVG outline. */
+.mh-dash-frame {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.mh-dash-frame rect {
+  width: calc(100% - 1px);
+  height: calc(100% - 1px);
+  fill: none;
+  stroke: var(--mh-frame);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+/* The header strip: one row, its rule under it, a crisp cast on the content. */
+.mh-strip {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--mh-strip-h);
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid var(--mh-strip-edge);
+}
+
+.mh-container-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.mh-container-body::before {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--mh-strip-cast);
+  pointer-events: none;
+}
+
+/* -- the subject: the underlying's search, QuantDesk's symbol plate ---------- */
+
+.mh-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 230px;
+  min-width: 150px;
+  margin-right: 6px;
+}
+.mh-search > svg {
+  position: absolute;
+  left: 9px;
+  color: var(--mh-text-tertiary);
+  pointer-events: none;
+}
+.mh-search input {
+  width: 100%;
+  height: 27px;
+  padding: 0 28px 0 29px;
+  border: 1px solid var(--mh-line);
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-well);
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+  outline: none;
+  transition: border-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-search input:hover {
+  border-color: var(--mh-line-strong);
+}
+.mh-search input:focus {
+  border-color: var(--mh-focus);
+}
+.mh-search input::placeholder {
+  color: var(--mh-text-disabled);
+}
+/* With an underlying picked, the empty field names it, strong, as the strip's subject. */
+.mh-has-subject input:not(:focus)::placeholder {
+  color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-search .mh-icon-btn {
+  position: absolute;
+  right: 2px;
+}
+.mh-kbd {
+  position: absolute;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius-small);
+  color: var(--mh-text-tertiary);
+  font: var(--mh-weight-regular) var(--mh-size-micro) / 1 var(--mh-font);
+  pointer-events: none;
+}
+
+.mh-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-surface-2);
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-micro);
+  font-weight: var(--mh-weight-emphasis);
+}
+
+/* -- a strip picker: flat, caption then value, a wash on hover --------------- */
+
+.mh-dropdown {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.mh-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 7px 0 8px;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-strong);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-picker:hover,
+.mh-picker[aria-expanded="true"] {
+  background: var(--mh-surface-2);
+}
+.mh-picker-caption {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+.mh-picker-value {
+  font-size: var(--mh-size-control);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-picker-aside {
+  margin-left: 2px;
+  color: var(--mh-text-tertiary);
+  font-weight: var(--mh-weight-regular);
+}
+.mh-picker > svg {
+  color: var(--mh-text-tertiary);
+  transition: transform var(--mh-dur) var(--mh-ease-out);
+}
+.mh-picker[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+/* A past session: amber, so it is never taken for live. */
+.mh-picker.mh-warn .mh-picker-value {
+  color: var(--mh-amber);
+}
+.mh-picker .mh-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* -- menus: search results and every dropdown -------------------------------- */
+
+.mh-menu {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius-card);
+  background: var(--mh-surface-1);
+  box-shadow: var(--mh-shadow-pop);
+}
+.mh-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(100%, 360px);
+  max-height: 360px;
+  overflow: auto;
+}
+.mh-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--mh-radius);
+  color: var(--mh-text-primary);
+  cursor: pointer;
+}
+.mh-results .mh-menu-item[aria-selected="true"],
+.mh-menu-item.mh-active {
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+}
+.mh-menu-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--mh-text-tertiary);
+}
+.mh-result-name {
+  color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-result-note {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+}
+
+.mh-pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: max(100%, 220px);
+  animation: mh-pop var(--mh-dur-pop) var(--mh-ease-out);
+  transform-origin: top left;
+}
+.mh-end > .mh-pop {
+  left: auto;
+  right: 0;
+  transform-origin: top right;
+}
+@keyframes mh-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.mh-menu-heading,
+.mh-menu-group {
+  padding: 8px 10px 4px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-menu-group:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--mh-line);
+  padding-top: 10px;
+}
+.mh-menu-list {
+  max-height: 340px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  outline: none;
+  scrollbar-width: thin;
+}
+.mh-menu-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.mh-menu-text {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+.mh-menu-item[aria-selected="true"] > .mh-menu-text {
+  color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-menu-note {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+}
+.mh-menu-tick {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  color: var(--mh-brand);
+}
+
+/* A canvas tone's swatch: its chrome over its container over its workspace,
+   painted by the tone's own tokens (data-canvas on the swatch). */
+.mh-swatch-tone {
+  display: grid;
+  grid-template-rows: 5px 1fr 5px;
+  width: 26px;
+  height: 20px;
+  overflow: hidden;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius-small);
+}
+.mh-swatch-chrome {
+  background: var(--mh-chrome);
+}
+.mh-swatch-page {
+  background: var(--mh-bg);
+}
+.mh-swatch-row {
+  background: var(--mh-workspace);
+}
+
+/* -- readouts: the latest minute, quiet, on the strip's right ---------------- */
+
+.mh-readouts {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--mh-size-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mh-readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.mh-readout-label,
+.mh-readout.mh-quiet {
+  color: var(--mh-text-tertiary);
+}
+.mh-readout-value {
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-readout-move {
+  color: var(--mh-text-tertiary);
+}
+.mh-readout-move.mh-up {
+  color: var(--mh-up);
+}
+.mh-readout-move.mh-down {
+  color: var(--mh-down);
+}
+
+.mh-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  text-overflow: ellipsis;
+}
+.mh-hint > svg {
+  flex: 0 0 auto;
+}
+.mh-hint.mh-warn {
+  color: var(--mh-text-secondary);
+}
+.mh-hint.mh-warn > svg {
+  color: var(--mh-amber);
+}
+.mh-hint.mh-error {
+  color: var(--mh-error-text);
+}
+
+/* -- empty and loading ------------------------------------------------------- */
+
+.mh-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  margin: auto;
+  padding: 24px 16px;
+  color: var(--mh-text-tertiary);
+  text-align: center;
+}
+.mh-empty-icon {
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  color: var(--mh-text-tertiary);
+}
+.mh-empty-icon.mh-error {
+  color: var(--mh-error-text);
+}
+.mh-empty-title {
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-title);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-empty-text {
+  color: var(--mh-text-secondary);
+  line-height: 1.5;
+}
+.mh-quick {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* -- chart: openalgo-charts fills the container's body --------------------------- */
+
+.straddle-chart {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: var(--mh-bg);
+}
+/* Placed and sized by the chart on whole device pixels (StraddleChart, "sharp at any display scale"). */
+.oa-chart {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* A pane's legend, TradingView's way: no box, ONE line straight on the chart at the plot's top
+   left, so it takes a single row of height. Each line an item (mark, name, value in its line's
+   colour, move since the open), wrapping only when the plot is too narrow. A halo in the chart's
+   own ground keeps every letter readable over the lines; the eye shows on the item under the
+   pointer, and a hidden line's item dims with its eye left showing. */
+.mh-legend {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 14px;
+  font-size: var(--mh-size-caption);
+  line-height: 19px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px var(--mh-bg),
+    0 0 2px var(--mh-bg),
+    0 0 4px var(--mh-bg),
+    0 0 6px var(--mh-bg);
+}
+.mh-legend-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mh-legend-mark {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+}
+.mh-legend-name {
+  color: var(--mh-text-secondary);
+}
+.mh-legend-detail {
+  margin-left: 5px;
+  color: var(--mh-text-tertiary);
+}
+.mh-legend-value {
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-legend-change {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-micro);
+}
+.mh-legend-change:empty {
+  display: none;
+}
+.mh-legend-change.mh-up {
+  color: var(--mh-up);
+}
+.mh-legend-change.mh-down {
+  color: var(--mh-down);
+}
+.mh-legend-eye {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--mh-dur-fast) var(--mh-ease), background-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-legend-row:hover .mh-legend-eye,
+.mh-legend-eye:focus-visible,
+.mh-legend-row[data-off] .mh-legend-eye {
+  opacity: 1;
+}
+.mh-legend-eye:hover {
+  background: var(--mh-surface-3);
+  color: var(--mh-text-strong);
+}
+.mh-legend-row[data-off] > :not(.mh-legend-eye) {
+  opacity: 0.4;
+}
+
+/* QuantDesk's axis tags: each line's latest value on its own axis, named. A plate in the line's
+   colour over the axis, the word on a darker panel, the value in bold dark ink; whole pixels. */
+.mh-axis-tag {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: stretch;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 4px;
+  color: #0b0c10;
+  font-size: var(--mh-size-micro);
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 45%);
+  pointer-events: none;
+}
+.mh-axis-tag[data-side="right"] {
+  right: 2px;
+}
+.mh-axis-tag[data-side="left"] {
+  left: 2px;
+  flex-direction: row-reverse;
+}
+.mh-axis-tag-word {
+  padding: 0 5px;
+  background: rgb(0 0 0 / 22%);
+  color: rgb(11 12 16 / 82%);
+}
+.mh-axis-tag-value {
+  padding: 0 6px;
+  font-weight: var(--mh-weight-emphasis);
+}
+
+/* QuantDesk's crosshair tooltip: one small frosted card per pane, beside the line. The chart
+   blurred behind it, a faint hairline and a soft lift; the pane the pointer is in, a brighter edge. */
+/* No box: the readings float beside the line on the chart itself, TradingView's way. A halo in
+   the chart's own ground keeps each letter readable where a line runs under it. */
+.mh-tipcard {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 0;
+  color: var(--mh-text-primary);
+  font-size: var(--mh-size-caption);
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px var(--mh-bg),
+    0 0 2px var(--mh-bg),
+    0 0 4px var(--mh-bg),
+    0 0 6px var(--mh-bg);
+  pointer-events: none;
+}
+.mh-tipitem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.mh-tipitem-mark {
+  align-self: center;
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+}
+.mh-tipitem-name {
+  color: var(--mh-text-secondary);
+}
+.mh-tip-pane[data-here] {
+  color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-tipitem-value {
+  color: var(--mh-text-strong);
+}
+
+/* Earlier sessions paging in: a quiet pill on the plot's left edge. */
+.chart-history {
+  position: absolute;
+  z-index: 3;
+  left: 12px;
+  bottom: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius-pill);
+  background: var(--mh-surface-1);
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+  box-shadow: var(--mh-shadow-pop);
+  pointer-events: auto;
+}
+.chart-history.mh-error {
+  color: var(--mh-error-text);
+}
+.chart-history-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-emphasis);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* -- narrow windows: the strip wraps, readouts take their own row ------------- */
+
+@media (max-width: 900px) {
+  .mh-strip {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .mh-strip > .mh-spacer {
+    display: none;
+  }
+  .mh-readouts {
+    flex-basis: 100%;
+    padding: 2px 4px;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mh-titlebar {
+    padding-left: 12px;
+  }
+  .mh-brand {
+    margin-right: 6px;
+  }
+  .mh-nav {
+    display: none;
+  }
+  .mh-search {
+    flex: 1 1 100%;
+    margin-right: 0;
+  }
+  .mh-results {
+    width: 100%;
+  }
+  .mh-readouts {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}
+
+/* The Layout menu's trigger: the layout's little picture and its name. */
+.mh-layout-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mh-glyph {
+  flex: none;
+  color: var(--mh-text-tertiary);
+}
+
+/* The "+" on a container's strip: what it opens, in a menu under it. */
+.mh-header-add {
+  position: relative;
+}
+.mh-header-add[data-open] {
+  opacity: 1;
+}
+.mh-add-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 230px;
+}

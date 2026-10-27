@@ -1,0 +1,25 @@
+# systemd service for the MarketHub server build on a Linux VPS.
+#   sudo cp deploy/markethub.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now markethub
+#   journalctl -u markethub -f -o cat      # live coloured status
+# Paths assume the hub folder is /opt/markethub/hub and .env is /opt/markethub/.env.
+[Unit]
+Description=MarketHub backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=markethub
+WorkingDirectory=/opt/markethub/hub
+ExecStart=/opt/markethub/hub/target/release/hub
+Environment=MARKETHUB_COLOR=1
+Restart=always
+RestartSec=5
+# Every user connection is an open file; the usual default (1024) would cap users at ~1000.
+LimitNOFILE=1048576
+# Hard cap so it can never eat the VPS. The hub itself uses ~10–20 MB; the cap
+# also covers the headless Chrome Shoonya login (~200–400 MB for ~15 s a day).
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

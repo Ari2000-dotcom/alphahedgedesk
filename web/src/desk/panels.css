@@ -1,0 +1,148 @@
+/* The straddle table and the ATM details panels (desk/panels.tsx). */
+
+.mh-strong {
+  color: var(--mh-text-strong);
+}
+
+.mh-table-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--mh-bg);
+}
+.mh-table-tabs {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 34px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--mh-line);
+}
+.mh-table-tab {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid var(--mh-text-strong);
+  background: transparent;
+  color: var(--mh-text-strong);
+}
+.mh-table-tab span,
+.mh-table-note {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+.mh-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.mh-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.mh-table th {
+  height: 28px;
+  padding: 0 12px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  font-weight: var(--mh-weight-regular);
+  text-align: right;
+  white-space: nowrap;
+}
+.mh-table td {
+  height: 28px;
+  padding: 0 12px;
+  color: var(--mh-text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+.mh-table .mh-l {
+  text-align: left;
+}
+.mh-table tbody tr:first-child {
+  background: var(--mh-surface-1);
+}
+
+.mh-details {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px 14px 8px;
+  overflow: auto;
+  background: var(--mh-bg);
+  font-variant-numeric: tabular-nums;
+}
+.mh-details-head {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+.mh-details-price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 6px;
+}
+.mh-details-price > span:first-child {
+  color: var(--mh-text-strong);
+  font-size: 24px;
+  line-height: 30px;
+}
+.mh-details-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--mh-line);
+}
+.mh-details-fact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 26px;
+  font-size: var(--mh-size-caption);
+  color: var(--mh-text-strong);
+}
+.mh-details-fact > span:first-child {
+  color: var(--mh-text-tertiary);
+}
+.mh-details-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--mh-line);
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+.mh-details-pick {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+}
+.mh-details-pick > i {
+  width: 4px;
+  height: 24px;
+  border-radius: 2px;
+}
+.mh-details-pick > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mh-details-pick > span:last-child {
+  align-items: flex-end;
+}
+.mh-details-pick em {
+  color: var(--mh-text-tertiary);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 14px;
+}

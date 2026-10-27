@@ -1,0 +1,31 @@
+# Hub settings for load tests only: simulated feed, no real brokers, no API keys,
+# separate port, so it can run next to the real hub.
+#   MarketHub-server.exe loadtest/config.toml
+#   loadtest --clients 5000 --topics 10 --instruments 50 --secs 60
+
+[server]
+bind = "127.0.0.1:8090"
+require_keys = false
+# Every simulated user comes from a handful of local addresses: no per-IP cap here,
+# and every tick (the worst case) for the measurements.
+guest = { max_connections = 1000000, max_topics = 50, history_days_per_minute = 1000000, max_updates_per_sec = 0 }
+
+[brokers.kotak]
+enabled = false
+history_limits = { per_second = 1 }
+
+[brokers.nubra]
+enabled = false
+base_url = "https://api.nubra.io"
+history_limits = { per_minute = 60 }
+
+[brokers.shoonya]
+enabled = false
+
+[brokers.sim]
+enabled = true
+history_limits = { per_second = 20 }
+server_limits = { per_second = 20 }
+latency_ms = [80, 250]
+# Every subscribed instrument ticks 4 times a second.
+tick_ms = 250

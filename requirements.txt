@@ -1,0 +1,14 @@
+fyers_apiv3==3.2.0
+kotakneoapi==3.0.9
+matplotlib==3.11.2
+NorenRestApiOAuth==0.0.41
+protobuf==7.36.2
+PyOTP==2.10.0
+PySocks==1.7.1
+python-dotenv==1.2.4
+python-socks==3.1.1
+PyYAML==6.0.3
+requests==2.31.0
+upstox-python-sdk==2.30.0
+websockets==17.3
+pproxy==2.7.9

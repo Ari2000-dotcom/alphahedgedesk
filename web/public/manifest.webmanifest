@@ -1,0 +1,11 @@
+{
+  "name": "MarketHub",
+  "short_name": "MarketHub",
+  "description": "ATM straddle: spot, synthetic future, premium and its VWAP, ATM IV and India VIX, minute by minute.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d0e12",
+  "theme_color": "#0d0e12",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

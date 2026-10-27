@@ -1,0 +1,69 @@
+# Hub configuration. Broker credentials stay in the .env file named below.
+env_file = "../.env"
+
+[server]
+bind = "127.0.0.1:8080"
+# false = a free website: anyone can open it without a key. Each visitor (IP
+# address) gets the guest limits below; keys in users.toml still work and get
+# their own limits (e.g. every tick for your algos). true = a key is required.
+# Either way the brokers' limits are never exceeded: the hub enforces those
+# for all visitors together.
+require_keys = false
+# Per visitor IP. Generous: several people on one mobile network share an IP.
+# max_updates_per_sec = 0: every update is sent the moment it is ready (no throttle delay).
+guest = { max_connections = 20, max_topics = 50, history_days_per_minute = 120, max_updates_per_sec = 0 }
+# CPU threads the hub uses. Default: all cores. Set e.g. 2 to leave room for other programs.
+# worker_threads = 2
+# Browsers may open /ws only from this hub's own website. To let another site's
+# pages use it too, list them, e.g. ["https://myothersite.com"]. Programs (algos,
+# scripts) send no Origin and aren't affected.
+# allowed_origins = []
+# true ONLY when visitors can reach the site through Cloudflare and nothing else
+# (a Cloudflare Tunnel, or a firewall that lets in only Cloudflare's addresses):
+# each visitor's IP is then read from Cloudflare's CF-Connecting-IP header, so
+# the per-visitor limits above still work. Leave false without Cloudflare: then
+# anyone could send that header themselves to dodge the limits.
+behind_cloudflare = false
+
+# Published broker limits. The hub only ever uses `use_fraction` of each
+# (default 0.8), and never more than `max_in_flight` concurrent calls.
+
+[brokers.kotak]
+enabled = true
+# Measured 2026-10-24: history rejects any call < 1 s after the previous one
+# (2/s → every 2nd call 429; 1/s sequential → 40/40 OK). The SDK's 10/s default
+# does not hold for this endpoint. 1.25 s gap leaves room for network jitter.
+history_limits = { per_second = 1, min_interval_ms = 1250, max_in_flight = 1 }
+
+[brokers.nubra]
+enabled = true
+base_url = "https://api.nubra.io"   # UAT sandbox: https://uatapi.nubra.io
+# The history broker for everything (NSE, BSE, MCX); Kotak is only the fallback.
+# Docs: 60 requests/min; the hub uses 80% (48/min), calls at least 1 s apart,
+# up to 4 at once (as QuantDesk), at least 0.25 s apart. Each call carries up
+# to 8 options/futures.
+history_limits = { per_minute = 60, min_interval_ms = 250, max_in_flight = 4 }
+
+[straddle]
+# Kept ready all day, as QuantDesk keeps its main charts ready: from 08:55 IST
+# (and when the hub starts) these record from the open (today's chart opens
+# instantly, no backfill) and their last 3 trading days are pre-built.
+# Nearest expiry of each. Anything else is built the first time someone opens it.
+warm = ["nse:nifty", "nse:banknifty", "nse:finnifty", "bse:sensex", "mcx:crudeoil", "mcx:naturalgas"]
+
+[brokers.shoonya]
+enabled = true
+# Shoonya's official headless login (Chrome for a few seconds), run whenever the
+# token is missing or expired. Paths are relative to this file.
+# Linux VPS: ["../.venv/bin/python", "../shoonya_auto_login.py"]
+login_cmd = ["../.venv/Scripts/python.exe", "../shoonya_auto_login.py"]
+
+[brokers.sim]
+# A simulated broker for load tests (loadtest/config.toml turns it on). Off on the live server.
+enabled = false
+# What the hub believes the limit is...
+history_limits = { per_second = 20, per_minute = 600, use_fraction = 0.8, max_in_flight = 8 }
+# ...and what the simulated broker server actually enforces (rejects above this).
+server_limits = { per_second = 20, per_minute = 600 }
+latency_ms = [80, 250]
+tick_ms = 100

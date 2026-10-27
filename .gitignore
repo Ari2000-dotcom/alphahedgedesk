@@ -1,0 +1,28 @@
+# Secrets: broker logins, API keys, saved credentials. Never in the repo.
+.env
+users.toml
+**/users.toml
+credentials.bin
+nubra-device-login.bin
+*.bin
+
+# Built or downloaded: rebuilt by the tools, large
+node_modules/
+target/
+.venv/
+__pycache__/
+web/dist/
+hub/data/
+data/
+logs/
+*.log
+*.exe
+
+# Old packages, backups and test output
+MarketHub-VPS/
+MarketHub-VPS-backup-*/
+MarketHub-VPS.zip
+socket_testing_deploy.zip
+*.zip
+.playwright-mcp/
+.claude/
