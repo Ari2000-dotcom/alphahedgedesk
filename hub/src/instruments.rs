@@ -428,6 +428,23 @@ impl Instruments {
         hits
     }
 
+    /// Every NSE/BSE index and every MCX underlying, unranked and untruncated: the fixed set a
+    /// plain picker builds its list from, as opposed to `search`, which ranks and truncates for an
+    /// interactive box. NSE/BSE also list single stocks, which never belong in that picker; MCX
+    /// lists nothing but commodities, so every MCX underlying stays in.
+    pub fn universe(&self) -> Vec<Underlying> {
+        let cat = self.catalog.read().clone();
+        cat.underlyings
+            .values()
+            .filter(|u| match u.market {
+                Market::Mcx => true,
+                Market::Nse => cat.nse_indices.contains_key(&u.name),
+                Market::Bse => BSE_INDEX_TOKENS.iter().any(|(n, _)| *n == u.name),
+            })
+            .cloned()
+            .collect()
+    }
+
     pub fn get(&self, market: Market, name_upper: &str) -> Option<Underlying> {
         self.catalog.read().underlyings.get(&(market, name_upper.to_string())).cloned()
     }

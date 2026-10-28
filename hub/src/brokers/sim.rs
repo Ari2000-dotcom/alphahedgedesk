@@ -142,7 +142,7 @@ pub async fn run_feed(hub: Arc<LiveHub>, mut rx: mpsc::UnboundedReceiver<FeedCmd
                     *px = (*px + rng.gen_range(-0.5..0.5)).max(1.0);
                     *vol += rng.gen_range(1.0f64..50.0).floor();
                     let ltp = (*px * 100.0).round() / 100.0;
-                    hub.publish(&Tick { id: id.clone(), ltp, volume: Some(*vol), bid: Some(ltp - 0.05), ask: Some(ltp + 0.05), ts_ms: now, src: "sim", replay: false });
+                    hub.publish(&Tick { id: id.clone(), ltp, volume: Some(*vol), bid: Some(ltp - 0.05), ask: Some(ltp + 0.05), oi: None, prev_oi: None, ts_ms: now, src: "sim", replay: false });
                 }
             }
         }

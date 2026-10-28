@@ -7,9 +7,10 @@
  * themselves and the same stylesheet paints them.
  */
 
-export type CanvasId = "charcoal" | "openalgo" | "quantdesk" | "graphite" | "neutral" | "slate" | "ink" | "moss" | "plum";
+export type CanvasId = "tradingview" | "charcoal" | "openalgo" | "quantdesk" | "graphite" | "neutral" | "slate" | "ink" | "moss" | "plum";
 
 export const CANVAS_TONES: readonly { id: CanvasId; name: string; note: string }[] = [
+  { id: "tradingview", name: "TradingView", note: "Navy chart, black frame" },
   { id: "charcoal", name: "Charcoal", note: "Light grey ground, dark containers" },
   { id: "openalgo", name: "OpenAlgo", note: "Near-black, navy grid" },
   { id: "quantdesk", name: "QuantDesk", note: "Kite's neutral grey" },
@@ -22,8 +23,8 @@ export const CANVAS_TONES: readonly { id: CanvasId; name: string; note: string }
 ];
 
 // A new key, so everyone starts on the new default instead of a tone saved before it existed.
-const STORAGE_KEY = "mh.canvas.v2";
-const DEFAULT: CanvasId = "charcoal";
+const STORAGE_KEY = "mh.canvas.v3";
+const DEFAULT: CanvasId = "tradingview";
 
 /** Anything unrecognised falls back to the default. */
 export function loadCanvas(): CanvasId {

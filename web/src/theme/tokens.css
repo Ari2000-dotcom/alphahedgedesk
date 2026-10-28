@@ -47,7 +47,34 @@
 }
 
 /*
- * Charcoal: the default. A lighter grey ground (`--mh-workspace`) with dark containers
+ * TradingView: the default. TradingView's dark chart, read off its own screen: a navy chart
+ * ground (#171b26) with a quiet grid (#232632) and #b2b5be axis text, in a near-black frame
+ * (#0b0c10, the chart's cool hue rather than dead black) with gutters a step up between the panels,
+ * and TradingView's grey ladder for every surface.
+ */
+[data-canvas="tradingview"] {
+  --mh-chrome: #0b0c10;
+  --mh-well: #0b0c10;
+  --mh-workspace: #15171d;
+  --mh-bg: #171b26;
+  --mh-head: #0b0c10;
+  --mh-surface-1: #1e222d;
+  --mh-surface-2: #2a2e39;
+  --mh-surface-3: #363a45;
+  --mh-line: #232632;
+  --mh-line-strong: #2a2e39;
+  --mh-plate-edge: transparent;
+  --mh-strip-edge: #2a2e39;
+  --mh-hover-wash: rgb(255 255 255 / 5%);
+  --mh-text-strong: #d1d4dc;
+  --mh-text-primary: #c3c6ce;
+  --mh-text-secondary: #b2b5be;
+  --mh-text-tertiary: #868993;
+  --mh-text-disabled: #5d606b;
+}
+
+/*
+ * Charcoal: a lighter grey ground (`--mh-workspace`) with dark containers
  * (`--mh-bg`) lifted off it by a 6px gutter, a thin edge and a rounded corner, and a darker
  * title bar of its own. Text is regular weight only; emphasis is brightness, so the four text
  * tiers are spread wide and the strongest is near white.
@@ -268,9 +295,12 @@
   --mh-primary-pressed: #d0cdc6;
   --mh-primary-text: #151514;
 
-  /* -- data colours mean data: never actions or warnings ----------------- */
-  --mh-up: #22ab94;
-  --mh-down: #f7525f;
+  /* -- data colours mean data: never actions or warnings -----------------
+     QuantDesk's own pair (theme/tokens.css there, 2026-09-23): solid, vivid
+     candles on the dark canvas, contrast-checked at 6.5:1 (up) and 4.6:1
+     (down) against a near-black ground. */
+  --mh-up: #22b35e;
+  --mh-down: #f23645;
 
   /* -- status: the hub's state, never a move ------------------------------ */
   --mh-status-ok: #62b58e;
@@ -291,12 +321,16 @@
   --mh-line-iv: #ffb547;
   --mh-line-vix: #3be0d3;
 
-  /* -- the chart's own furniture: axis numbers, crosshair, the tooltip's glass */
+  /* -- the chart's own furniture: axis numbers, the rule between the plot and its axes (none:
+     on TradingView the plot runs straight into its scales), the crosshair, and the dark chips its
+     time and price sit in on the axes (TradingView's near-black label, white ink) */
   --mh-chart-axis-text: var(--mh-text-secondary);
+  --mh-chart-axis-line: transparent;
+  /* The rule between two panes: a step brighter than the grid, so it reads as an edge between two
+     charts and never as one more grid line. */
+  --mh-chart-pane-seam: var(--mh-surface-3);
   --mh-chart-crosshair: var(--mh-text-tertiary);
-  --mh-tip-glass: color-mix(in srgb, var(--mh-surface-1) 82%, transparent);
-  --mh-tip-edge: color-mix(in srgb, var(--mh-line-strong) 80%, transparent);
-  --mh-tip-shadow: 0 6px 20px rgb(0 0 0 / 50%), 0 1px 3px rgb(0 0 0 / 40%);
+  --mh-chart-crosshair-tag: var(--mh-chrome);
 
   /* -- a container's header strip (QuantDesk's): its height, and the crisp
      three-row cast under its rule, never a blur. ----------------------- */
@@ -305,6 +339,9 @@
 
   /* -- type ------------------------------------------------------------ */
   --mh-font: "Inter", "Segoe UI", system-ui, sans-serif;
+  /* The chart's face (TradingView's stack, vendor/openalgo-charts/src/render/font.ts), which a
+     chart's container sets its header in too, so strip, chips and chart read as one instrument. */
+  --mh-chart-font: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   --mh-weight-regular: 400;
   /* No bold anywhere: emphasis is brightness, not weight. */
   --mh-weight-emphasis: 400;

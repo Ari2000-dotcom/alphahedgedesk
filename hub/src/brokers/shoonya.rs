@@ -385,8 +385,8 @@ async fn session_inner(
         tx.send(Message::Text(serde_json::json!({"t": "t", "k": k.join("#")}).to_string().into())).await?;
     }
 
-    // Last known (ltp, volume, bid, ask) per instrument: `tf` updates carry only what changed.
-    let mut last: HashMap<String, (f64, Option<f64>, Option<f64>, Option<f64>)> = HashMap::new();
+    // Last known (ltp, volume, bid, ask, oi, prev_oi) per instrument: `tf` updates carry only what changed.
+    let mut last: HashMap<String, (f64, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)> = HashMap::new();
     // Shoonya's own SDK heartbeats every 3 s with a ping carrying {"t":"h"}; with
     // a 20 s empty ping their gateway reset the connection every few minutes.
     let mut ping = tokio::time::interval(HEARTBEAT_EVERY);
@@ -418,12 +418,15 @@ async fn session_inner(
                 // `tk` answers a subscribe with the last known state (yesterday's, before
                 // the open); only a `tf` that moves price, volume or the quote is live.
                 let replay = kind == "tk" || ["lp", "v", "bp1", "sp1"].iter().all(|f| num(f).is_none());
-                let entry = last.entry(format!("{e}|{tk}")).or_insert((0.0, None, None, None));
+                let entry = last.entry(format!("{e}|{tk}")).or_insert((0.0, None, None, None, None, None));
                 if let Some(lp) = num("lp") { entry.0 = lp; }
                 if let Some(vol) = num("v") { entry.1 = Some(vol); }
                 // Best bid / ask; 0 means no order on that side.
                 if let Some(b) = num("bp1") { entry.2 = (b > 0.0).then_some(b); }
                 if let Some(a) = num("sp1") { entry.3 = (a > 0.0).then_some(a); }
+                // Open interest (a derivative leg only): `oi` now, `poi` yesterday's close.
+                if let Some(oi) = num("oi") { entry.4 = Some(oi); }
+                if let Some(poi) = num("poi") { entry.5 = Some(poi); }
                 if entry.0 == 0.0 { continue; }
                 let Some(seg) = segment(e) else { continue };
                 hub.publish(&Tick {
@@ -432,6 +435,8 @@ async fn session_inner(
                     volume: entry.1,
                     bid: entry.2,
                     ask: entry.3,
+                    oi: entry.4,
+                    prev_oi: entry.5,
                     ts_ms: chrono::Utc::now().timestamp_millis(),
                     src: "shoonya",
                     replay,

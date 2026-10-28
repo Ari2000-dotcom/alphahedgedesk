@@ -95,6 +95,11 @@ pub struct Tick {
     /// Best bid / ask, when the feed sends them.
     pub bid: Option<f64>,
     pub ask: Option<f64>,
+    /// Open interest, on a derivative (an option or future leg), when the feed sends it.
+    pub oi: Option<f64>,
+    /// Yesterday's closing open interest, when the feed sends it: `oi - prev_oi` is today's
+    /// change without a second lookup, the OI profile's "change" mode.
+    pub prev_oi: Option<f64>,
     pub ts_ms: i64,
     pub src: &'static str,
     /// The broker repeating its last known state (Shoonya's reply to a subscribe),

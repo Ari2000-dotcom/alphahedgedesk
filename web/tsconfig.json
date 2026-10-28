@@ -10,7 +10,10 @@
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "openalgo-charts": ["./vendor/openalgo-charts/src/index.ts"]
+    }
   },
   "include": ["src"]
 }
