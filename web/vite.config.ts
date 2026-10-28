@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -11,6 +12,10 @@ export default defineConfig(({ mode }) => {
   const hub = process.env.HUB ?? (mode === "vps" ? VPS : "http://127.0.0.1:8080");
   return {
     plugins: [react()],
+    resolve: {
+      // Our fork of openalgo-charts, from its TypeScript source (vendor/openalgo-charts/FORK.md).
+      alias: [{ find: /^openalgo-charts$/, replacement: fileURLToPath(new URL("./vendor/openalgo-charts/src/index.ts", import.meta.url)) }],
+    },
     build: {
       target: "es2022",
       sourcemap: false,

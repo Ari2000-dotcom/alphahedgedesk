@@ -85,6 +85,8 @@ pub struct AppState {
     pub allowed_origins: Arc<Vec<String>>,
     /// Visitors reach the hub only through Cloudflare: their IP is in `CF-Connecting-IP`.
     pub behind_cloudflare: bool,
+    /// Whole-chain OI from Nubra for the OI profile (`oi_profile` op); None without Nubra.
+    pub oi: Option<Arc<crate::oi_profile::OiProfiles>>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -185,7 +187,16 @@ fn client_ip(behind_cloudflare: bool, peer: SocketAddr, headers: &HeaderMap) -> 
     peer.ip()
 }
 
-/// Weekdays in the range: what a history request costs against the user's allowance.
+/// What a history request costs against the user's allowance, in days. Intraday: a day per
+/// weekday, each a day of bars to fetch. Daily candles: a day per four weeks, since a whole range
+/// of daily bars is one broker query (Nubra serves up to 92 days of one symbol in one call) — 90
+/// days of a daily chart cost 3 rather than 64 of the allowance's 120.
+fn history_cost(interval: Interval, from: NaiveDate, to: NaiveDate) -> u32 {
+    let days = days_in(from, to);
+    if interval == Interval::D1 { days.div_ceil(20).max(1) } else { days }
+}
+
+/// Weekdays in the range.
 fn days_in(from: NaiveDate, to: NaiveDate) -> u32 {
     use chrono::Datelike;
     from.iter_days()
@@ -246,6 +257,7 @@ async fn instruments_reply(s: AppState, op: Op, ctl: mpsc::Sender<Message>) {
     inst.ensure_fresh().await;
     let reply = match op {
         Op::Search { req, q } => serde_json::json!({"t": "search", "req": req, "results": inst.search(&q, SEARCH_LIMIT)}),
+        Op::Universe { req } => serde_json::json!({"t": "universe", "req": req, "results": inst.universe()}),
         Op::Chain { req, underlying, expiry } => {
             let chain = Canonical::parse(&underlying).and_then(|c| match c {
                 Canonical::Underlying { market, .. } => {
@@ -299,7 +311,7 @@ async fn history_rest(
         Ok(v) => v,
         Err(e) => return (StatusCode::BAD_REQUEST, e).into_response(),
     };
-    if let Err(e) = conn.user().take_history(days_in(q.from, q.to)) {
+    if let Err(e) = conn.user().take_history(history_cost(iv, q.from, q.to)) {
         return (StatusCode::TOO_MANY_REQUESTS, e).into_response();
     }
     let pieces = match s.hist.request(id, iv, q.from, q.to) {
@@ -403,8 +415,11 @@ enum Op {
     Unsub { topics: Vec<String> },
     History { req: String, id: String, interval: String, from: NaiveDate, to: NaiveDate },
     Search { req: String, q: String },
+    Universe { req: String },
     StraddleHistory { req: String, underlying: String, expiry: NaiveDate, date: NaiveDate },
     Chain { req: String, underlying: String, expiry: NaiveDate },
+    /// Every strike's call and put OI for these expiries, now and at the previous session's close.
+    OiProfile { req: String, underlying: String, expiries: Vec<NaiveDate> },
 }
 
 fn text(v: serde_json::Value) -> Message {
@@ -500,7 +515,7 @@ async fn client(socket: WebSocket, s: AppState, conn: Conn) {
             }
             Op::History { req, id, interval, from, to } => {
                 let pieces = parse_req(&s, &id, &interval)
-                    .and_then(|v| user.take_history(days_in(from, to)).map(|_| v))
+                    .and_then(|v| user.take_history(history_cost(v.1, from, to)).map(|_| v))
                     .and_then(|(id, iv)| s.hist.request(id, iv, from, to));
                 match pieces {
                     Ok(p) => {
@@ -511,8 +526,32 @@ async fn client(socket: WebSocket, s: AppState, conn: Conn) {
                     }
                 }
             }
-            op @ (Op::Search { .. } | Op::Chain { .. }) => {
+            op @ (Op::Search { .. } | Op::Chain { .. } | Op::Universe { .. }) => {
                 tokio::spawn(instruments_reply(s.clone(), op, ctl.clone()));
+            }
+            Op::OiProfile { req, underlying, expiries } => {
+                let Some(oi) = s.oi.clone() else {
+                    let _ = ctl.try_send(text(serde_json::json!({"t": "err", "req": req, "error": "the OI profile needs Nubra"})));
+                    continue;
+                };
+                // One shared Nubra call a minute per underlying and expiries (oi_profile.rs), so
+                // it is not charged against the visitor's history allowance.
+                let ctl = ctl.clone();
+                tokio::spawn(async move {
+                    let reply = match oi.get(&underlying, &expiries).await {
+                        Ok(v) => {
+                            let mut m = (*v).clone();
+                            if let Some(o) = m.as_object_mut() {
+                                o.insert("t".into(), serde_json::json!("oi_profile"));
+                                o.insert("req".into(), serde_json::json!(req));
+                                o.insert("underlying".into(), serde_json::json!(underlying));
+                            }
+                            m
+                        }
+                        Err(e) => serde_json::json!({"t": "err", "req": req, "error": e}),
+                    };
+                    let _ = ctl.send(text(reply)).await;
+                });
             }
             Op::StraddleHistory { req, underlying, expiry, date } => {
                 let Some(hub) = s.straddles.clone() else {

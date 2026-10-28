@@ -4,13 +4,15 @@ import { dayLabel, fmt0, fmt2, istDate, nearestExpiry, pastWeekdays } from "../c
 import type { Hub } from "../hub/client";
 import type { Bar, StraddleSnapshot, StraddleUpdate, TopicMessage, Underlying } from "../hub/types";
 import { Dropdown } from "../ui/Dropdown";
-import { AlertIcon, ChartIcon, CloseIcon, PlusIcon, SearchIcon, Spinner } from "../ui/icons";
-import { StraddleChart, toggleLine, useHidden, type HistoryStatus, type LineId } from "./StraddleChart";
+import { useFitRow, wraps } from "../ui/fitRow";
+import { AlertIcon, ChartIcon, CloseIcon, PlusIcon, Spinner } from "../ui/icons";
+import { openOf, percentMove, readingOf, sessionOpens, StraddleChart, toggleLine, useHidden, type HistoryStatus, type LineId, type Move } from "./StraddleChart";
 import { ATM_COLOUR, MAX_STRADDLES } from "../desk/compare";
 import "./chips.css";
 import { picksFor, togglePick, useCompare } from "../desk/compare";
 import { useStrikeLines } from "./useStrikeLines";
 import { dropSummary, publishSummary } from "../desk/summary";
+import { useUniverse } from "../core/universe";
 
 /**
  * Pick an underlying (any NSE, BSE or MCX name with options), an expiry, and
@@ -22,7 +24,6 @@ import { dropSummary, publishSummary } from "../desk/summary";
  */
 
 const PAST_DAYS = 3;
-const SEARCH_DELAY_MS = 200;
 const LAST_PICK = "mh.straddle.pick";
 /** Fired on this window when a chart picks something, so a chain beside it can follow. */
 export const PICK_EVENT = "mh-pick";
@@ -78,7 +79,6 @@ function upsert(bars: Bar[], bar: Bar) {
  * One straddle: the page a dock tab shows. Each tab has its own pick (underlying, expiry,
  * session), kept in the tab's own params so the saved layout brings it back; `onPick` hands each
  * change out for that. `autoPick` names an underlying a layout preset opens the tab on.
- * `active`: the tab in front of the focused container, the one "/" searches in.
  */
 export function StraddlePage({
   hub,
@@ -98,17 +98,21 @@ export function StraddlePage({
   const [pick, setPick] = useState<Pick | null>(() => (initialPick !== undefined ? freshPick(initialPick) : readPick()));
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Underlying[]>([]);
-  const [searching, setSearching] = useState(false);
   const [bars, setBars] = useState<Bar[]>([]);
   const [note, setNote] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [resync, setResync] = useState(0);
-  const [connected, setConnected] = useState(hub.state === "open");
-
-  useEffect(() => hub.onStatus((s) => setConnected(s === "open")), [hub]);
+  const universe = useUniverse(hub);
+  const underlyingOf = useMemo(() => new Map(universe.map((u) => [u.id, u] as const)), [universe]);
+  // The underlying on the chart is always on the list, so the picker names it ("NIFTY NSE") rather
+  // than "Pick an underlying": before the hub's universe answers, and from a hub that has no
+  // `universe` op to answer with.
+  const underlyingOptions = useMemo(() => {
+    const option = (u: Underlying) => ({ value: u.id, label: u.name, note: `${daysTo(nearestExpiry(u.expiries))} · ${u.id.split(":")[0]!.toUpperCase()}` });
+    const list = universe.map(option);
+    return pick && !underlyingOf.has(pick.underlying.id) ? [option(pick.underlying), ...list] : list;
+  }, [universe, underlyingOf, pick]);
 
   useEffect(() => {
     try {
@@ -120,32 +124,8 @@ export function StraddlePage({
     onPickRef.current?.(pick);
   }, [pick]);
 
-  /* -- search, debounced ---------------------------------------------------------------- */
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2 || !connected) {
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setSearching(true);
-      hub
-        .request<{ results: Underlying[] }>({ op: "search", q }, "search")
-        .then((r) => !cancelled && setResults(r.results))
-        .catch(() => !cancelled && setResults([]))
-        .finally(() => !cancelled && setSearching(false));
-    }, SEARCH_DELAY_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query, hub, connected]);
-
   const choose = (u: Underlying) => {
     setPick({ underlying: u, expiry: nearestExpiry(u.expiries), day: "live" });
-    setQuery("");
-    setResults([]);
   };
 
   /* -- today: live topic ------------------------------------------------------------------ */
@@ -302,45 +282,19 @@ export function StraddlePage({
   // The chart's minutes: earlier sessions in front of the one picked (its time axis marks each day).
   const chartBars = useMemo(() => (older.length > 0 ? [...older.flatMap((o) => o.bars), ...bars] : bars), [older, bars]);
 
-  /* -- search box: ↑/↓ move, Enter picks, Escape clears; "/" focuses it ------------------------ */
-  const searchBox = useRef<HTMLInputElement>(null);
-  const [active, setActive] = useState(0);
-  useEffect(() => setActive(0), [results]);
-  useEffect(() => {
-    // Several tabs are mounted at once: only the one in front takes "/".
-    if (!inFront) return;
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (e.key !== "/" || target?.closest("input, select, textarea")) return;
-      e.preventDefault();
-      searchBox.current?.focus();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [inFront]);
-  const open = results.length > 0 || (searching && query.trim().length >= 2);
-
-  /** A quick pick on the empty page: search the name, take the first match. */
-  const [quick, setQuick] = useState("");
+  /** A quick pick on the empty page: the first match for `name` already loaded in the universe. */
   const quickPick = (name: string) => {
-    setQuick(name);
-    hub
-      .request<{ results: Underlying[] }>({ op: "search", q: name }, "search")
-      .then((r) => {
-        if (r.results[0]) choose(r.results[0]);
-        else setQuery(name);
-      })
-      .catch(() => setQuery(name))
-      .finally(() => setQuick(""));
+    const u = universe.find((x) => x.name === name);
+    if (u) choose(u);
   };
 
-  // A layout preset's tab opens on its underlying once the hub is there.
+  // A layout preset's tab opens on its underlying once the universe has loaded.
   const autoDone = useRef(false);
   useEffect(() => {
-    if (!autoPick || pick || autoDone.current || !connected) return;
+    if (!autoPick || pick || autoDone.current || universe.length === 0) return;
     autoDone.current = true;
     quickPick(autoPick);
-  }, [autoPick, pick, connected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoPick, pick, universe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const days = useMemo(() => pastWeekdays(PAST_DAYS), []);
   const viewKey = `${topic}|${pick?.day ?? ""}|${bars.length > 0 ? bars[0]!.t : 0}`;
@@ -368,7 +322,18 @@ export function StraddlePage({
   const hiddenLines = useHidden();
   const first = bars[0];
   const last = bars[bars.length - 1];
-  const exchange = pick ? pick.underlying.id.split(":")[0]!.toUpperCase() : "";
+  // The chips row reads its lines at the minute under the chart's crosshair, else the latest one,
+  // each with its move since that minute's session opened.
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  // The strip's readouts and the chips row each stay on one line however long the name or the
+  // prices: measured, the least needed pieces give way first (`data-drop`, lowest rank first).
+  const fitStrip = useFitRow();
+  const fitChips = useFitRow(wraps);
+  const byTime = useMemo(() => new Map(chartBars.map((b) => [Math.floor(b.t / 1000), b] as const)), [chartBars]);
+  const opens = useMemo(() => sessionOpens(chartBars), [chartBars]);
+  const shown = (hoverTime !== null ? byTime.get(hoverTime) : undefined) ?? last;
+  const shownOpen = openOf(opens, shown);
+  const atm = readingOf("straddle", shown, shownOpen);
 
   const status = error ? (
     <span className="mh-hint mh-error" role="alert">
@@ -395,78 +360,25 @@ export function StraddlePage({
         {/* The container's one header strip, QuantDesk's way: what is drawn on the left (the
             underlying, its expiry, the session), quiet readouts of the latest minute on the right. */}
         <div className="mh-strip">
-          <div className={pick ? "mh-search mh-has-subject" : "mh-search"}>
-            <SearchIcon size={14} />
-            <input
-              ref={searchBox}
-              type="text"
-              placeholder={pick ? "" : "Search: nifty, sensex, crudeoil"}
-              value={query}
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown" && results.length > 0) {
-                  e.preventDefault();
-                  setActive((i) => (i + 1) % results.length);
-                } else if (e.key === "ArrowUp" && results.length > 0) {
-                  e.preventDefault();
-                  setActive((i) => (i - 1 + results.length) % results.length);
-                } else if (e.key === "Enter" && results[active]) {
-                  choose(results[active]);
-                  e.currentTarget.blur();
-                } else if (e.key === "Escape") {
-                  setQuery("");
-                  e.currentTarget.blur();
-                }
-              }}
-              role="combobox"
-              aria-expanded={open}
-              aria-controls="mh-search-results"
-              aria-label="Search an underlying"
-            />
-            {pick && !query ? (
-              <span className="mh-subject" aria-hidden>
-                {pick.underlying.name} <span className="mh-chip">{exchange}</span>
-              </span>
-            ) : null}
-            {query ? (
-              <button type="button" className="mh-icon-btn mh-small" aria-label="Clear" title="Clear" onClick={() => setQuery("")}>
-                <CloseIcon size={13} />
-              </button>
-            ) : (
-              <kbd className="mh-kbd" aria-hidden>
-                /
-              </kbd>
-            )}
-            {open && (
-              <ul className="mh-menu mh-results" id="mh-search-results" role="listbox">
-                {searching && results.length === 0 ? (
-                  <li className="mh-menu-status">
-                    <Spinner size={13} />
-                    Searching
-                  </li>
-                ) : null}
-                {results.map((u, i) => (
-                  <li
-                    key={u.id}
-                    role="option"
-                    aria-selected={i === active}
-                    className="mh-menu-item"
-                    onMouseDown={() => choose(u)}
-                    onMouseEnter={() => setActive(i)}
-                  >
-                    <span className="mh-result-name">{u.name}</span>
-                    <span className="mh-chip">{u.id.split(":")[0]!.toUpperCase()}</span>
-                    <span className="mh-spacer" />
-                    <span className="mh-result-note">
-                      {u.expiries.length} {u.expiries.length === 1 ? "expiry" : "expiries"} · lot {fmt0(u.lot)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <Dropdown
+            label="Underlying"
+            caption={false}
+            value={pick?.underlying.id ?? ""}
+            onChange={(id) => {
+              const u = underlyingOf.get(id);
+              if (u) choose(u);
+            }}
+            renderValue={(o) =>
+              o ? (
+                <>
+                  {o.label} <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
+                </>
+              ) : (
+                "Pick an underlying"
+              )
+            }
+            options={underlyingOptions}
+          />
 
           {pick && (
             <>
@@ -500,16 +412,23 @@ export function StraddlePage({
           <span className="mh-spacer" />
 
           {pick ? (
-            <div className="mh-readouts">
+            <div className="mh-readouts" ref={fitStrip}>
               {status ??
                 (last ? (
                   <>
-                    <Readout label="ATM" value={`${fmt0(last.strike)}${last.rolled ? " (rolled)" : ""}`} />
-                    <Readout label="Straddle" value={fmt2(last.straddle)} change={first ? move(last.straddle, first.straddle) : null} />
-                    <Readout className="mh-r-iv" label="IV" value={last.iv != null ? `${last.iv.toFixed(2)}%` : "—"} change={first?.iv != null && last.iv != null ? { text: `${signed(last.iv - first.iv)} pts`, tone: tone(last.iv - first.iv) } : null} />
-                    <Readout className="mh-r-spot" label="Spot" value={fmt2(last.spot)} change={first ? move(last.spot, first.spot) : null} />
-                    <span className="mh-readout mh-quiet mh-r-lot">
-                      Lot {fmt0(pick.underlying.lot)} · {bars.length} min
+                    {/* In groups, a hairline between them: the ATM strike and its two legs, the
+                        straddle and its session average, then IV. Spot reads on the chips row. */}
+                    <span className="mh-readgroup">
+                      <Readout label="ATM" value={`${fmt0(last.strike)}${last.rolled ? " (rolled)" : ""}`} />
+                      <Readout drop={3} badge label="CE" value={fmt2(last.call)} title={`${fmt0(last.strike)} call`} />
+                      <Readout drop={3} badge label="PE" value={fmt2(last.put)} title={`${fmt0(last.strike)} put`} />
+                    </span>
+                    <span className="mh-readgroup">
+                      <Readout label="Straddle" value={fmt2(last.straddle)} change={first ? move(last.straddle, first.straddle) : null} />
+                      <Readout drop={2} label="Avg" value={last.vwap != null ? fmt2(last.vwap) : "—"} title="The straddle's average price this session (its VWAP)" />
+                    </span>
+                    <span className="mh-readgroup" data-drop={1}>
+                      <Readout label="IV" value={last.iv != null ? `${last.iv.toFixed(2)}%` : "—"} change={first?.iv != null && last.iv != null ? { text: `${signed(last.iv - first.iv)} pts`, tone: tone(last.iv - first.iv) } : null} />
                     </span>
                   </>
                 ) : null)}
@@ -518,20 +437,25 @@ export function StraddlePage({
         </div>
 
         {pick && bars.length > 0 ? (
-          <div className="mh-chips" role="toolbar" aria-label="Straddles on the chart">
+          <div className="mh-chips" role="toolbar" aria-label="Straddles on the chart" ref={fitChips}>
+            {/* Each chip reads its line at the minute under the crosshair, else the latest one. */}
             <span className="mh-chipbox">
               <i style={{ background: ATM_COLOUR }} />
-              <span className="mh-chipbox-name">{last ? fmt0(last.strike) : "ATM"}</span>
+              <span className="mh-chipbox-name">{shown ? fmt0(shown.strike) : "ATM"}</span>
               <em>ATM</em>
-              <span style={{ color: ATM_COLOUR }}>{last ? fmt2(last.straddle) : "—"}</span>
+              <span style={{ color: ATM_COLOUR }}>{atm.value}</span>
+              <ChipMove move={atm.move} drop={3} />
             </span>
             {picks.map((p) => {
               const line = strikeLines.find((l) => l.strike === p.strike);
+              const v = hoverTime !== null ? line?.byTime.get(hoverTime) ?? null : line?.last ?? null;
+              const from = line?.first ?? null;
               return (
                 <span key={p.strike} className="mh-chipbox">
                   <i style={{ background: p.colour }} />
                   <span className="mh-chipbox-name">{fmt0(p.strike)}</span>
-                  <span style={{ color: p.colour }}>{line?.last != null ? fmt2(line.last) : "—"}</span>
+                  <span style={{ color: p.colour }}>{v !== null ? fmt2(v) : "—"}</span>
+                  <ChipMove move={v !== null && from !== null && v !== from ? percentMove(v, from) : null} drop={1} />
                   <button type="button" className="mh-chipbox-x" aria-label={`Remove the ${p.strike} straddle`} onClick={() => togglePick(pick.underlying.id, pick.expiry, p.strike)}>
                     <CloseIcon size={10} />
                   </button>
@@ -549,18 +473,25 @@ export function StraddlePage({
             <span className="mh-spacer" />
             {(
               [
-                ["vwap", "VWAP", "--mh-line-vwap", "5 3"],
+                ["vwap", "VWAP", "--mh-line-vwap", ""],
                 ["spot", "Spot", "--mh-line-spot", ""],
                 ["fut", "Syn fut", "--mh-line-fut", ""],
               ] as [LineId, string, string, string][]
-            ).map(([id, label, colour, dash]) => (
-              <button key={id} type="button" className="mh-overlay" aria-pressed={!hiddenLines.has(id)} onClick={() => toggleLine(id)}>
-                <svg width="14" height="4" viewBox="0 0 14 4" aria-hidden>
-                  <path d="M0 2h14" stroke={`var(${colour})`} strokeWidth="2" strokeDasharray={dash} />
-                </svg>
-                {label}
-              </button>
-            ))}
+            ).map(([id, label, colour, dash]) => {
+              const r = readingOf(id, shown, shownOpen);
+              return (
+                <button key={id} type="button" className="mh-overlay" aria-pressed={!hiddenLines.has(id)} onClick={() => toggleLine(id)}>
+                  <svg width="14" height="4" viewBox="0 0 14 4" aria-hidden>
+                    <path d="M0 2h14" stroke={`var(${colour})`} strokeWidth="2" strokeDasharray={dash} />
+                  </svg>
+                  {label}
+                  <span className="mh-overlay-value" style={{ color: `var(${colour})` }} data-drop={2}>
+                    {r.value}
+                  </span>
+                  <ChipMove move={r.move} drop={1} />
+                </button>
+              );
+            })}
           </div>
         ) : null}
         <div className="mh-container-body">
@@ -572,7 +503,7 @@ export function StraddlePage({
               history={history}
               historyLabel={historyDay}
               extras={strikeLines}
-              onRemoveExtra={(strike) => pick && togglePick(pick.underlying.id, pick.expiry, strike)}
+              onHover={setHoverTime}
               onReachStart={loadOlder}
               onRetry={() => {
                 setHistory("idle");
@@ -608,8 +539,7 @@ export function StraddlePage({
               <div className="mh-empty-text">Spot, synthetic future, the ATM straddle with its VWAP, ATM IV and India VIX, minute by minute.</div>
               <div className="mh-quick">
                 {QUICK.map((name) => (
-                  <button key={name} type="button" className="mh-btn" disabled={!connected || quick !== ""} onClick={() => quickPick(name)}>
-                    {quick === name ? <Spinner size={13} /> : null}
+                  <button key={name} type="button" className="mh-btn" disabled={universe.length === 0} onClick={() => quickPick(name)}>
                     {name}
                   </button>
                 ))}
@@ -656,11 +586,32 @@ function move(now: number, from: number): { text: string; tone: Tone } {
   return { text: `${sign(pct)}${Math.abs(pct).toFixed(2)}%`, tone: tone(pct) };
 }
 
-/** One quiet readout on the strip: label one ink tier down, value, and its move since the open. */
-function Readout({ label, value, change, className }: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null; className?: string }>) {
+/** A chip's move since its session opened, green up and red down; nothing when there is none yet. */
+function ChipMove({ move, drop }: Readonly<{ move: Move | null; drop?: number }>) {
+  if (!move) return null;
   return (
-    <span className={className ? `mh-readout ${className}` : "mh-readout"}>
-      <span className="mh-readout-label">{label}</span>
+    <span className={`mh-chip-move ${move.dir > 0 ? "mh-up" : move.dir < 0 ? "mh-down" : ""}`} data-drop={drop}>
+      {move.text}
+    </span>
+  );
+}
+
+/**
+ * One quiet readout on the strip: label one ink tier down, value, and its move since the open. A
+ * `badge` label sits in a small plate, as the chips row marks "ATM": the CE and PE legs.
+ */
+function Readout({
+  label,
+  value,
+  change,
+  className,
+  badge = false,
+  title,
+  drop,
+}: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null; className?: string; badge?: boolean; title?: string; drop?: number }>) {
+  return (
+    <span className={className ? `mh-readout ${className}` : "mh-readout"} title={title} data-drop={drop}>
+      <span className={badge ? "mh-readout-label mh-readout-badge" : "mh-readout-label"}>{label}</span>
       <span className="mh-readout-value">{value}</span>
       {change ? <span className={`mh-readout-move ${change.tone}`}>{change.text}</span> : null}
     </span>

@@ -16,6 +16,7 @@ mod history;
 mod instruments;
 mod live;
 mod model;
+mod oi_profile;
 mod ratelimit;
 mod secure_store;
 mod straddle;
@@ -283,11 +284,17 @@ async fn start_hub(logs: Arc<Mutex<VecDeque<String>>>) -> anyhow::Result<Hub> {
             }
         });
     }
+    // The OI profile reads Nubra's whole-chain OI against the instrument lists' strikes.
+    let oi = match (&nubra, &instruments) {
+        (Some(n), Some(i)) => Some(oi_profile::OiProfiles::new(n.clone(), i.clone())),
+        _ => None,
+    };
     let state = api::AppState {
         live,
         hist,
         instruments,
         straddles,
+        oi,
         users: users::Users::open(config_dir.join("users.toml"), cfg.server.require_keys, cfg.server.guest.clone()),
         started: Instant::now(),
         clients: Arc::new(AtomicU64::new(0)),

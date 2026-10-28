@@ -14,6 +14,7 @@ import type { Hub } from "../hub/client";
 import { readPick, StraddlePage, type Pick } from "../straddle/StraddlePage";
 import { DetailsPanel, TablePanel } from "../desk/panels";
 import { ChainPanel } from "../option/ChainPanel";
+import { ScripPage, type ScripPick } from "../chart/ScripPage";
 import { ChartIcon, ChevronDownIcon, CloseIcon, MaximizeIcon, PlusIcon, RestoreIcon, SplitDownIcon, SplitRightIcon, TableIcon } from "../ui/icons";
 
 /**
@@ -74,11 +75,16 @@ function titleOf(pick: Pick | null | undefined, autoPick?: string): string {
 
 // One sequence for every "+" and preset, so two panels made in one millisecond cannot collide.
 let counter = 0;
-export type PanelKind = "straddle" | "chain" | "table" | "details";
+export type PanelKind = "straddle" | "chain" | "table" | "details" | "scrip";
 const nextId = (kind: PanelKind = "straddle") => `${kind}-${++counter}-${Date.now()}`;
 
 interface ChainParams {
   pick?: Pick | null;
+}
+
+interface ScripParams {
+  id?: string;
+  interval?: string;
 }
 
 /* -- a tab's content: one straddle ------------------------------------------------------------- */
@@ -131,7 +137,25 @@ function DetailsDockPanel() {
   return desk ? <DetailsPanel hub={desk.hub} /> : null;
 }
 
-const COMPONENTS = { straddle: StraddlePanel, chain: ChainDockPanel, table: TableDockPanel, details: DetailsDockPanel };
+function ScripDockPanel({ api, params }: IDockviewPanelProps<ScripParams>) {
+  const desk = useContext(Desk);
+  if (!desk) return null;
+  return (
+    <ScripPage
+      hub={desk.hub}
+      themeKey={desk.themeKey}
+      initialId={params.id}
+      initialInterval={params.interval}
+      onPick={(pick: ScripPick | null) => {
+        const title = pick ? `Chart · ${pick.name}` : "Chart";
+        if (api.title !== title) api.setTitle(title);
+        api.updateParameters({ id: pick?.id, interval: pick?.interval });
+      }}
+    />
+  );
+}
+
+const COMPONENTS = { straddle: StraddlePanel, chain: ChainDockPanel, table: TableDockPanel, details: DetailsDockPanel, scrip: ScripDockPanel };
 
 /* -- a tab: icon, title, a close button that shows on hover ----------------------------------- */
 
@@ -162,7 +186,7 @@ function DeskTab({ api, containerApi }: IDockviewPanelHeaderProps) {
       }}
     >
       <span className="mh-tab-icon" aria-hidden>
-        {api.id.startsWith("straddle") ? <ChartIcon size={13} /> : <TableIcon size={13} />}
+        {api.id.startsWith("straddle") || api.id.startsWith("scrip") ? <ChartIcon size={13} /> : <TableIcon size={13} />}
       </span>
       <span className="mh-tab-title">{title}</span>
       <TypeCaret panelId={api.id} containerApi={containerApi} onReplaced={() => api.close()} />
@@ -252,7 +276,9 @@ export function addPanelOf(api: DockviewApi, kind: PanelKind, position: Position
         ? api.addPanel({ id: nextId("table"), component: "table", title: "All straddles", position })
         : kind === "details"
           ? api.addPanel({ id: nextId("details"), component: "details", title: "ATM straddle", position })
-          : api.addPanel({ id: nextId(), component: "straddle", title: "New straddle", params: { pick: null } satisfies StraddleParams, position });
+          : kind === "scrip"
+            ? api.addPanel({ id: nextId("scrip"), component: "scrip", title: "Chart", params: {} satisfies ScripParams, position })
+            : api.addPanel({ id: nextId(), component: "straddle", title: "New straddle", params: { pick: null } satisfies StraddleParams, position });
   panel.api.setActive();
   return panel;
 }
@@ -262,6 +288,7 @@ const addStraddle = (api: DockviewApi, position: Position) => addPanelOf(api, "s
 export const PANEL_KINDS: readonly { kind: PanelKind; name: string; note: string }[] = [
   { kind: "straddle", name: "Straddle chart", note: "Compare up to 5" },
   { kind: "chain", name: "Option chain", note: "Add strikes" },
+  { kind: "scrip", name: "Scrip chart", note: "Candles + ATR" },
   { kind: "table", name: "All straddles", note: "Table" },
   { kind: "details", name: "ATM straddle", note: "Details" },
 ];

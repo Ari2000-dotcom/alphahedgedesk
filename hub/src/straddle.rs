@@ -1136,6 +1136,8 @@ mod tests {
                         volume: Some(vol),
                         bid: None,
                         ask: None,
+                        oi: None,
+                        prev_oi: None,
                         ts_ms: now_ms(),
                         src: "test",
                         replay: false,

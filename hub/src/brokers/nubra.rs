@@ -633,6 +633,58 @@ impl HistoryBroker for Nubra {
 }
 
 impl Nubra {
+    /// One `charts/multistrike` request: every listed strike's call and put open interest at each
+    /// query's instant, for every expiry it names, in one call (QuantDesk
+    /// `nubra_strike_oi::multistrike_oi`, the request nubra.io's own OI chart sends). Counted
+    /// against the same limiter as candle history, so the OI profile never pushes Nubra past its
+    /// published limit. Body and answer shapes: see `crate::oi_profile`.
+    pub async fn multistrike(&self, body: &Value) -> Result<Value, String> {
+        let mut permit = None;
+        for _ in 0..40 {
+            match self.limiter.try_acquire() {
+                Ok(p) => {
+                    permit = Some(p);
+                    break;
+                }
+                Err(wait) => tokio::time::sleep(wait.max(Duration::from_millis(50))).await,
+            }
+        }
+        let _permit = permit.ok_or("nubra is busy; the OI profile will try again")?;
+        let (token, device) = self.session().await.map_err(|e| match e {
+            FetchError::Auth(m) | FetchError::Other(m) => format!("nubra: {m}"),
+            FetchError::RateLimited(_) => "nubra is busy; the OI profile will try again".into(),
+        })?;
+        let resp = self
+            .client
+            .post(format!("{}/charts/multistrike?chart=Open_Interest_Change", self.base))
+            .header("x-device-id", &device)
+            .header("x-app-version", APP_VERSION)
+            .header("x-device-os", DEVICE_OS)
+            .header("Cookie", format!("authToken={token}; sessionToken={token}; deviceId={device}"))
+            .header("Origin", "https://nubra.io")
+            .header("Referer", "https://nubra.io/")
+            .bearer_auth(&token)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("nubra: {e}"))?;
+        let status = resp.status().as_u16();
+        if status == 429 {
+            self.limiter.penalize(None);
+            return Err("nubra rate-limited the OI profile; it will try again".into());
+        }
+        if status == 440 || status == 401 {
+            self.drop_session().await;
+            return Err("nubra session expired; logging in again".into());
+        }
+        let text = resp.text().await.map_err(|e| format!("nubra: {e}"))?;
+        if !(200..300).contains(&status) {
+            return Err(format!("nubra HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+        }
+        self.limiter.success();
+        serde_json::from_str(&text).map_err(|e| format!("nubra: {e}"))
+    }
+
     /// One `charts/timeseries` query: these symbols, whole IST days `from` to `to`.
     async fn timeseries(&self, exch: &str, kind: &str, symbols: &[String], from: NaiveDate, to: NaiveDate, interval: Interval) -> Result<Value, FetchError> {
         let (token, device) = self.session().await?;

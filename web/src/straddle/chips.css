@@ -6,7 +6,9 @@
   align-items: center;
   gap: 6px;
   flex: none;
-  padding: 6px 10px;
+  /* The strip's own insets (4 px left, 6 px right), so the chips' plates start under the pickers'
+     and the last reading ends under the strip's. */
+  padding: 6px 6px 6px 4px;
   border-bottom: 1px solid var(--mh-line);
 }
 .mh-chipbox {
@@ -18,7 +20,7 @@
   border-radius: var(--mh-radius-small);
   background: var(--mh-surface-1);
   color: var(--mh-text-strong);
-  font-size: var(--mh-size-caption);
+  font-size: var(--mh-size-control);
   font-variant-numeric: tabular-nums;
 }
 .mh-chipbox > i {
@@ -27,13 +29,13 @@
   border-radius: 2px;
 }
 .mh-chipbox > em {
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 0 6px;
+  border-radius: var(--mh-radius-small);
   background: var(--mh-surface-3);
   color: var(--mh-text-secondary);
-  font-size: 10px;
+  font-size: var(--mh-size-micro);
   font-style: normal;
-  line-height: 14px;
+  line-height: 18px;
 }
 .mh-chipbox:not(:has(.mh-chipbox-x)) {
   padding-right: 9px;
@@ -60,18 +62,26 @@
   gap: 6px;
   height: 26px;
   padding: 0 9px;
-  border: 1px dashed var(--mh-surface-3);
+  border: 0;
   border-radius: var(--mh-radius-small);
   background: transparent;
   color: var(--mh-text-secondary);
-  font-size: var(--mh-size-caption);
+  font-size: var(--mh-size-control);
   cursor: pointer;
+  transition:
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-chip-add span {
   color: var(--mh-text-tertiary);
 }
 .mh-chip-add:hover:not(:disabled) {
+  background: var(--mh-surface-1);
   color: var(--mh-text-strong);
+}
+.mh-chip-add:active:not(:disabled),
+.mh-overlay:active {
+  transform: translateY(1px);
 }
 .mh-chip-add:disabled {
   opacity: 0.45;
@@ -87,8 +97,11 @@
   border-radius: var(--mh-radius-small);
   background: transparent;
   color: var(--mh-text-secondary);
-  font-size: var(--mh-size-caption);
+  font-size: var(--mh-size-control);
   cursor: pointer;
+  transition:
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-overlay[aria-pressed="false"] {
   color: var(--mh-text-disabled);
@@ -99,3 +112,35 @@
 .mh-overlay:hover {
   background: var(--mh-surface-1);
 }
+
+/* A chip's reading: its value in the line's colour, then its move since the session opened, a
+   size down, green up and red down. A hidden line's toggle keeps its reading, dimmed. */
+.mh-chip-move {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  font-variant-numeric: tabular-nums;
+}
+.mh-chip-move.mh-up {
+  color: var(--mh-up);
+}
+.mh-chip-move.mh-down {
+  color: var(--mh-down);
+}
+/* A word-space from its value, as on the strip (the chip's gap is 8 px, a toggle's 7). */
+.mh-chipbox > .mh-chip-move {
+  margin-left: -4px;
+}
+.mh-overlay > .mh-chip-move {
+  margin-left: -3px;
+}
+.mh-overlay-value {
+  font-variant-numeric: tabular-nums;
+}
+.mh-overlay[aria-pressed="false"] .mh-overlay-value,
+.mh-overlay[aria-pressed="false"] .mh-chip-move {
+  opacity: 0.45;
+}
+
+/* The row stays one line as its panel narrows: measured, the toggles' moves give way first, then
+   their values (the axis tags still carry them), then the ATM chip's move (ui/fitRow.ts). A row of
+   picked straddles too long for that wraps. */

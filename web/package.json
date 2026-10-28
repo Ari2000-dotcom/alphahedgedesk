@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "dockview": "3.2.0",
-    "openalgo-charts": "2.6.7",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

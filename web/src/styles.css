@@ -299,6 +299,7 @@ input {
    corner and its outline are the container's (theme/dock.css). */
 .mh-container {
   container-type: inline-size;
+  font-family: var(--mh-chart-font);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -454,6 +455,16 @@ input {
 }
 
 /* -- a strip picker: flat, caption then value, a wash on hover --------------- */
+
+/* The straddle strip's pickers read a step up, with the readouts beside them. A value and its
+   badge ("BANKNIFTY NSE") are centred on each other, so the badge's height does not lift the name
+   off the line the other pickers' text sits on. */
+.mh-strip .mh-picker-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mh-size-body);
+}
 
 .mh-dropdown {
   position: relative;
@@ -651,10 +662,10 @@ input {
 .mh-readouts {
   display: flex;
   align-items: baseline;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
   overflow: hidden;
-  font-size: var(--mh-size-caption);
+  font-size: var(--mh-size-control);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -669,17 +680,63 @@ input {
 }
 .mh-readout-value {
   color: var(--mh-text-strong);
-  font-size: var(--mh-size-control);
+  font-size: var(--mh-size-body);
   font-weight: var(--mh-weight-emphasis);
 }
 .mh-readout-move {
   color: var(--mh-text-tertiary);
+}
+/* A readout or chip piece the measured fit has hidden (ui/fitRow.ts). */
+[data-drop][hidden] {
+  display: none !important;
+}
+
+/* Readouts that belong together (the ATM strike and its legs, the straddle and its average), a
+   hairline before every group after the first. */
+.mh-readgroup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.mh-readgroup + .mh-readgroup::before {
+  content: "";
+  align-self: center;
+  width: 1px;
+  height: 14px;
+  background: var(--mh-line-strong);
+}
+/* A leg's label in a small plate, as the chips row marks "ATM". */
+.mh-readout-badge {
+  align-self: center;
+  padding: 0 6px;
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-surface-2);
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-micro);
+  line-height: 18px;
 }
 .mh-readout-move.mh-up {
   color: var(--mh-up);
 }
 .mh-readout-move.mh-down {
   color: var(--mh-down);
+}
+/* A move in thin grey brackets, TradingView's way, "1,819.53 (-9.05%)": the brackets in the
+   quietest text tier so they recede, the move inside keeping its green or red. Drawn by CSS, so a
+   move the measured fit hides takes its brackets with it. On the strip and the chips row alike. */
+.mh-readout-move::before,
+.mh-chip-move::before {
+  content: "(";
+  color: var(--mh-text-disabled);
+}
+.mh-readout-move::after,
+.mh-chip-move::after {
+  content: ")";
+  color: var(--mh-text-disabled);
+}
+/* A bracketed move sits a word-space from its value, not a column gap away. */
+.mh-readout-move {
+  margin-left: -1px;
 }
 
 .mh-hint {
@@ -746,7 +803,7 @@ input {
 
 /* -- chart: openalgo-charts fills the container's body --------------------------- */
 
-.straddle-chart {
+.oa-chart-frame {
   position: relative;
   display: flex;
   flex: 1;
@@ -762,169 +819,6 @@ input {
   top: 0;
   width: 100%;
   height: 100%;
-}
-
-/* A pane's legend, TradingView's way: no box, ONE line straight on the chart at the plot's top
-   left, so it takes a single row of height. Each line an item (mark, name, value in its line's
-   colour, move since the open), wrapping only when the plot is too narrow. A halo in the chart's
-   own ground keeps every letter readable over the lines; the eye shows on the item under the
-   pointer, and a hidden line's item dims with its eye left showing. */
-.mh-legend {
-  position: absolute;
-  z-index: 4;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: 14px;
-  font-size: var(--mh-size-caption);
-  line-height: 19px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-shadow:
-    0 0 2px var(--mh-bg),
-    0 0 2px var(--mh-bg),
-    0 0 4px var(--mh-bg),
-    0 0 6px var(--mh-bg);
-}
-.mh-legend-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.mh-legend-mark {
-  width: 10px;
-  height: 2px;
-  border-radius: 1px;
-}
-.mh-legend-name {
-  color: var(--mh-text-secondary);
-}
-.mh-legend-detail {
-  margin-left: 5px;
-  color: var(--mh-text-tertiary);
-}
-.mh-legend-value {
-  font-weight: var(--mh-weight-emphasis);
-}
-.mh-legend-change {
-  color: var(--mh-text-tertiary);
-  font-size: var(--mh-size-micro);
-}
-.mh-legend-change:empty {
-  display: none;
-}
-.mh-legend-change.mh-up {
-  color: var(--mh-up);
-}
-.mh-legend-change.mh-down {
-  color: var(--mh-down);
-}
-.mh-legend-eye {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  margin-left: -2px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--mh-radius-small);
-  background: transparent;
-  color: var(--mh-text-tertiary);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--mh-dur-fast) var(--mh-ease), background-color var(--mh-dur-fast) var(--mh-ease);
-}
-.mh-legend-row:hover .mh-legend-eye,
-.mh-legend-eye:focus-visible,
-.mh-legend-row[data-off] .mh-legend-eye {
-  opacity: 1;
-}
-.mh-legend-eye:hover {
-  background: var(--mh-surface-3);
-  color: var(--mh-text-strong);
-}
-.mh-legend-row[data-off] > :not(.mh-legend-eye) {
-  opacity: 0.4;
-}
-
-/* QuantDesk's axis tags: each line's latest value on its own axis, named. A plate in the line's
-   colour over the axis, the word on a darker panel, the value in bold dark ink; whole pixels. */
-.mh-axis-tag {
-  position: absolute;
-  z-index: 3;
-  display: inline-flex;
-  align-items: stretch;
-  height: 18px;
-  overflow: hidden;
-  border-radius: 4px;
-  color: #0b0c10;
-  font-size: var(--mh-size-micro);
-  line-height: 18px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 45%);
-  pointer-events: none;
-}
-.mh-axis-tag[data-side="right"] {
-  right: 2px;
-}
-.mh-axis-tag[data-side="left"] {
-  left: 2px;
-  flex-direction: row-reverse;
-}
-.mh-axis-tag-word {
-  padding: 0 5px;
-  background: rgb(0 0 0 / 22%);
-  color: rgb(11 12 16 / 82%);
-}
-.mh-axis-tag-value {
-  padding: 0 6px;
-  font-weight: var(--mh-weight-emphasis);
-}
-
-/* QuantDesk's crosshair tooltip: one small frosted card per pane, beside the line. The chart
-   blurred behind it, a faint hairline and a soft lift; the pane the pointer is in, a brighter edge. */
-/* No box: the readings float beside the line on the chart itself, TradingView's way. A halo in
-   the chart's own ground keeps each letter readable where a line runs under it. */
-.mh-tipcard {
-  position: absolute;
-  z-index: 4;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 2px 0;
-  color: var(--mh-text-primary);
-  font-size: var(--mh-size-caption);
-  line-height: 1.25;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-shadow:
-    0 0 2px var(--mh-bg),
-    0 0 2px var(--mh-bg),
-    0 0 4px var(--mh-bg),
-    0 0 6px var(--mh-bg);
-  pointer-events: none;
-}
-.mh-tipitem {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.mh-tipitem-mark {
-  align-self: center;
-  width: 8px;
-  height: 2px;
-  border-radius: 1px;
-}
-.mh-tipitem-name {
-  color: var(--mh-text-secondary);
-}
-.mh-tip-pane[data-here] {
-  color: var(--mh-text-strong);
-  font-weight: var(--mh-weight-emphasis);
-}
-.mh-tipitem-value {
-  color: var(--mh-text-strong);
 }
 
 /* Earlier sessions paging in: a quiet pill on the plot's left edge. */
@@ -960,24 +854,11 @@ input {
   cursor: pointer;
 }
 
-/* The strip gives way by its container's width, not the window's: the least needed first
-   (lot and minutes, then spot, then IV), and below that the readouts take a row of their own. */
-@container (max-width: 1240px) {
-  .mh-strip .mh-r-lot {
-    display: none;
-  }
-}
-@container (max-width: 1080px) {
-  .mh-strip .mh-r-spot {
-    display: none;
-  }
-}
-@container (max-width: 900px) {
-  .mh-strip .mh-r-iv {
-    display: none;
-  }
-}
-@container (max-width: 560px) {
+/* The strip stays one line however long the name or the prices: its readouts are measured and
+   the least needed give way first (ui/fitRow.ts, `data-drop`), IV, then the straddle's average,
+   then the CE and PE legs; the ATM strike and the straddle always stay. A panel too narrow for even
+   those beside the pickers gives the readouts a line of their own, measured the same way. */
+@container (max-width: 600px) {
   .mh-strip {
     flex-wrap: wrap;
     row-gap: 4px;
@@ -990,10 +871,6 @@ input {
   .mh-strip .mh-readouts {
     flex-basis: 100%;
     padding: 2px 4px;
-  }
-  .mh-strip .mh-r-iv,
-  .mh-strip .mh-r-spot {
-    display: inline-flex;
   }
 }
 

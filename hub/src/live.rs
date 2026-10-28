@@ -110,6 +110,11 @@ struct QuoteMsg<'a> {
     bid: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ask: Option<f64>,
+    /// Open interest (a derivative leg only) and yesterday's close, for the OI profile.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    oi: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    poi: Option<f64>,
     /// Only sent when true: the broker's last known state, not a live update.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     replay: bool,
@@ -242,6 +247,8 @@ impl LiveHub {
                 v: tick.volume,
                 bid: tick.bid,
                 ask: tick.ask,
+                oi: tick.oi,
+                poi: tick.prev_oi,
                 replay: tick.replay,
                 ts: tick.ts_ms,
                 src: tick.src,

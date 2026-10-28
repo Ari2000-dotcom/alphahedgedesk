@@ -7,7 +7,8 @@ import type { Hub } from "../hub/client";
 import type { Underlying } from "../hub/types";
 import { freshPick, PICK_EVENT, readPick, type Pick } from "../straddle/StraddlePage";
 import { Dropdown } from "../ui/Dropdown";
-import { CheckIcon, CloseIcon, PlusIcon, SearchIcon, Spinner } from "../ui/icons";
+import { CheckIcon, PlusIcon, Spinner } from "../ui/icons";
+import { useUniverse } from "../core/universe";
 import { useQuote } from "./quotes";
 import { useChain, type ChainRow } from "./useChain";
 import "./chain.css";
@@ -46,17 +47,18 @@ export function ChainPanel({
     window.addEventListener(PICK_EVENT, follow);
     return () => window.removeEventListener(PICK_EVENT, follow);
   }, []);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Underlying[]>([]);
-  const [active, setActive] = useState(0);
-  /** What the search is doing, so the box never looks dead: "", searching, none, or an error. */
-  const [note, setNote] = useState("");
-  const input = useRef<HTMLInputElement>(null);
-  const [connected, setConnected] = useState(hub.state === "open");
   const [narrow, setNarrow] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  useEffect(() => hub.onStatus((s) => setConnected(s === "open")), [hub]);
+  const universe = useUniverse(hub);
+  const underlyingOf = useMemo(() => new Map(universe.map((u) => [u.id, u] as const)), [universe]);
+  // The underlying in view is always on the list, so the picker names it rather than "Pick an
+  // underlying": before the hub's universe answers, and from a hub that has no `universe` op.
+  const underlyingOptions = useMemo(() => {
+    const option = (u: Underlying) => ({ value: u.id, label: u.name, note: `${daysTo(nearestExpiry(u.expiries))} · ${u.id.split(":")[0]!.toUpperCase()}` });
+    const list = universe.map(option);
+    return pick && !underlyingOf.has(pick.underlying.id) ? [option(pick.underlying), ...list] : list;
+  }, [universe, underlyingOf, pick]);
 
   useEffect(() => {
     onPick?.(pick);
@@ -71,56 +73,14 @@ export function ChainPanel({
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length === 0) {
-      setResults([]);
-      setNote("");
-      return;
-    }
-    if (q.length < 2) {
-      setResults([]);
-      setNote("Type at least 2 letters");
-      return;
-    }
-    if (!connected) {
-      setResults([]);
-      setNote("Not connected to the hub yet");
-      return;
-    }
-    let cancelled = false;
-    setNote("Searching…");
-    const timer = setTimeout(() => {
-      hub
-        .request<{ results: Underlying[] }>({ op: "search", q }, "search", 20_000)
-        .then((r) => {
-          if (cancelled) return;
-          setResults(r.results);
-          setNote(r.results.length === 0 ? `No underlying matches “${q}”` : "");
-        })
-        .catch((e: Error) => {
-          if (cancelled) return;
-          setResults([]);
-          setNote(`Search failed: ${e.message}`);
-        });
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query, hub, connected]);
-
   const choose = (u: Underlying) => {
     own.current = true;
     setPick({ underlying: u, expiry: nearestExpiry(u.expiries), day: "live" });
-    setQuery("");
-    setResults([]);
   };
-  const quick = (name: string) =>
-    hub
-      .request<{ results: Underlying[] }>({ op: "search", q: name }, "search")
-      .then((r) => r.results[0] && choose(r.results[0]))
-      .catch(() => setQuery(name));
+  const quick = (name: string) => {
+    const u = universe.find((x) => x.name === name);
+    if (u) choose(u);
+  };
 
   const id = pick?.underlying.id ?? "";
   const expiry = pick?.expiry ?? "";
@@ -163,80 +123,28 @@ export function ChainPanel({
   const mcx = id.startsWith("mcx:");
   const years = Math.round(yearsToExpiry(expiry, mcx) * 525_600) / 525_600;
 
-  const exchange = id ? id.split(":")[0]!.toUpperCase() : "";
-
   return (
     <div className="mh-chain" ref={box} data-narrow={narrow || undefined}>
       <div className="mh-chain-strip">
-        <div className="mh-chain-find" data-has-pick={pick ? "" : undefined} onClick={() => input.current?.focus()}>
-          <SearchIcon size={14} />
-          <input
-            ref={input}
-            className="mh-chain-input"
-            value={query}
-            placeholder={pick ? "" : "Search: nifty, sensex, crudeoil"}
-            spellCheck={false}
-            autoComplete="off"
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActive(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown" && results.length > 0) {
-                e.preventDefault();
-                setActive((i) => (i + 1) % results.length);
-              } else if (e.key === "ArrowUp" && results.length > 0) {
-                e.preventDefault();
-                setActive((i) => (i - 1 + results.length) % results.length);
-              } else if (e.key === "Enter" && results[active]) {
-                choose(results[active]!);
-                e.currentTarget.blur();
-              } else if (e.key === "Escape") {
-                setQuery("");
-                setResults([]);
-                e.currentTarget.blur();
-              }
-            }}
-            role="combobox"
-            aria-expanded={results.length > 0}
-            aria-label="Search an underlying"
-          />
-          {pick && !query ? (
-            <span className="mh-chain-subject" aria-hidden>
-              {pick.underlying.name} <span className="mh-chip">{exchange}</span>
-            </span>
-          ) : null}
-          {query ? (
-            <button type="button" className="mh-chain-clear" aria-label="Clear" onClick={() => setQuery("")}>
-              <CloseIcon size={12} />
-            </button>
-          ) : null}
-          {results.length === 0 && note ? (
-            <div className="mh-menu mh-chain-results mh-chain-note" role="status">
-              {note}
-            </div>
-          ) : null}
-          {results.length > 0 ? (
-            <ul className="mh-menu mh-chain-results" role="listbox">
-              {results.map((u, i) => (
-                <li
-                  key={u.id}
-                  className={i === active ? "mh-menu-item mh-active" : "mh-menu-item"}
-                  role="option"
-                  aria-selected={i === active}
-                  onPointerEnter={() => setActive(i)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    choose(u);
-                  }}
-                >
-                  <span className="mh-menu-text">{u.name}</span>
-                  <span className="mh-chip">{u.id.split(":")[0]!.toUpperCase()}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        <Dropdown
+          label="Underlying"
+          caption={false}
+          value={id}
+          onChange={(pickedId) => {
+            const u = underlyingOf.get(pickedId);
+            if (u) choose(u);
+          }}
+          renderValue={(o) =>
+            o ? (
+              <>
+                {o.label} <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
+              </>
+            ) : (
+              "Pick an underlying"
+            )
+          }
+          options={underlyingOptions}
+        />
         {pick ? (
           <Dropdown
             label="Expiry"
@@ -262,7 +170,7 @@ export function ChainPanel({
           <div className="mh-empty-text">Its option chain, with the straddle at every strike.</div>
           <div className="mh-quick">
             {QUICK.map((name) => (
-              <button key={name} type="button" className="mh-btn" disabled={!connected} onClick={() => void quick(name)}>
+              <button key={name} type="button" className="mh-btn" disabled={universe.length === 0} onClick={() => quick(name)}>
                 {name}
               </button>
             ))}
