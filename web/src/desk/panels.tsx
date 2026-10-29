@@ -42,10 +42,10 @@ export function TablePanel() {
   const rows = useSummaries();
   return (
     <div className="mh-table-panel">
-      <div className="mh-table-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected="true" className="mh-table-tab">
+      <div className="mh-table-head">
+        <span className="mh-table-title">
           Straddles <span>{rows.length}</span>
-        </button>
+        </span>
         <span className="mh-spacer" />
         <span className="mh-table-note">One update a second</span>
       </div>
@@ -79,7 +79,7 @@ export function TablePanel() {
                 return (
                   <tr key={s.key}>
                     <td className="mh-l mh-strong">{s.name}</td>
-                    <td className="mh-l">{s.expiry}</td>
+                    <td className="mh-l">{s.expiryLabel}</td>
                     <td>{fmt0(s.last.strike)}</td>
                     <td className="mh-strong">{fmt2(f.last)}</td>
                     <td className={tone(f.change)}>{sign(f.change, 2)}</td>
@@ -179,7 +179,7 @@ export function DetailsPanel({ hub }: Readonly<{ hub: Hub }>) {
   return (
     <div className="mh-details">
       <div className="mh-details-head">
-        <span className="mh-strong">ATM {fmt0(s.last.strike)}</span> straddle · {s.name} · {s.expiry}
+        <span className="mh-strong">ATM {fmt0(s.last.strike)}</span> straddle · {s.name} · {s.expiryLabel}
       </div>
       <div className="mh-details-price">
         <span>{fmt2(f.last)}</span>

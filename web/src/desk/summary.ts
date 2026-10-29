@@ -12,7 +12,10 @@ export interface Summary {
   key: string;
   name: string;
   exchange: string;
+  /** `2026-11-03`: what the time to expiry, the compare list and the leg topics are keyed on. */
   expiry: string;
+  /** `Tue, 3 Nov`: what the panels print. */
+  expiryLabel: string;
   lot: number;
   /** The session's first and latest minute. */
   open: Bar;
