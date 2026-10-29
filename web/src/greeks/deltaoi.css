@@ -1,0 +1,259 @@
+/*
+ * The delta x OI panel (greeks/DeltaOiPanel.tsx), on the page's tokens.
+ *
+ * Three figures on top, then one row a strike with the call's exposure growing left of the strike
+ * and the put's growing right, as the chain puts its two sides either side of its strike band.
+ * Calls are the up colour, puts the down one — data colours, the same two the charts use — and
+ * nothing here is bold: emphasis is brightness, as everywhere else on the desk.
+ */
+
+.mh-doi {
+  /* The tiles below ask this panel's own width, not the window's. */
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--mh-bg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- the three figures ----------------------------------------------------------------------- */
+
+.mh-doi-figures {
+  flex: none;
+  padding: 14px 12px 12px;
+  border-bottom: 1px solid var(--mh-line);
+}
+
+.mh-doi-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.mh-doi-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--mh-line);
+  border-radius: var(--mh-radius-card);
+  background: var(--mh-surface-1);
+}
+/* A hairline of the side's own colour down the left edge: which tile is which, without a label chip. */
+.mh-doi-tile[data-side="call"] {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--mh-up) 70%, transparent);
+}
+.mh-doi-tile[data-side="put"] {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--mh-down) 70%, transparent);
+}
+.mh-doi-tile[data-side="net"] {
+  box-shadow: inset 2px 0 0 var(--mh-line-strong);
+}
+.mh-doi-tile-label {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.mh-doi-tile-value {
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-display);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.mh-doi-tile-note {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* How the gross exposure divides: one bar, the two sides' shares end to end. */
+.mh-doi-balance {
+  display: flex;
+  height: 6px;
+  margin-top: 12px;
+  border-radius: var(--mh-radius-pill);
+  overflow: hidden;
+  background: var(--mh-surface-2);
+}
+.mh-doi-balance > i {
+  height: 100%;
+  transition: width var(--mh-dur) var(--mh-ease);
+}
+.mh-doi-balance-call {
+  background: color-mix(in srgb, var(--mh-up) 80%, transparent);
+}
+.mh-doi-balance-put {
+  background: color-mix(in srgb, var(--mh-down) 80%, transparent);
+}
+.mh-doi-balance-legend {
+  display: flex;
+  margin-top: 6px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+
+/* -- the strikes ----------------------------------------------------------------------------- */
+
+.mh-doi-head {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--mh-line);
+  background: var(--mh-head);
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+.mh-doi-head > span:first-child {
+  flex: 1;
+  text-align: right;
+  padding-right: 10px;
+}
+.mh-doi-head > span:last-child {
+  flex: 1;
+  padding-left: 10px;
+}
+.mh-doi-head-strike {
+  flex: none;
+  width: 96px;
+  text-align: center;
+}
+
+.mh-doi-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.mh-doi-row {
+  display: flex;
+  align-items: stretch;
+  height: 26px;
+  border-bottom: 1px solid var(--mh-line);
+}
+.mh-doi-row:hover {
+  background: var(--mh-hover-wash);
+}
+/* The money strike, underlined in the brand colour as the chain underlines its own. */
+.mh-doi-row[data-atm] .mh-doi-strike {
+  color: var(--mh-text-strong);
+  box-shadow: inset 0 -2px 0 var(--mh-brand);
+}
+
+.mh-doi-side {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+/* The bar grows out from the strike band; the figure sits on its inner end, over it. */
+.mh-doi-side > i {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  border-radius: 2px;
+  transition: width var(--mh-dur) var(--mh-ease);
+}
+.mh-doi-val {
+  position: relative;
+  padding: 0 10px;
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+}
+.mh-doi-call {
+  justify-content: flex-end;
+}
+.mh-doi-call > i {
+  right: 0;
+  background: color-mix(in srgb, var(--mh-up) 26%, transparent);
+}
+.mh-doi-put > i {
+  left: 0;
+  background: color-mix(in srgb, var(--mh-down) 26%, transparent);
+}
+.mh-doi-row:hover .mh-doi-call > i {
+  background: color-mix(in srgb, var(--mh-up) 38%, transparent);
+}
+.mh-doi-row:hover .mh-doi-put > i {
+  background: color-mix(in srgb, var(--mh-down) 38%, transparent);
+}
+
+.mh-doi-strike {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 96px;
+  background: var(--mh-surface-1);
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-control);
+}
+
+/* -- the foot: what the figures cover, and the units they are in ----------------------------- */
+
+.mh-doi-foot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border-top: 1px solid var(--mh-line);
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+}
+.mh-doi-dot {
+  color: var(--mh-text-disabled);
+}
+.mh-doi-limit {
+  color: var(--mh-text-secondary);
+}
+.mh-doi-units {
+  display: flex;
+  gap: 2px;
+}
+.mh-doi-unit {
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  cursor: pointer;
+}
+.mh-doi-unit:hover {
+  color: var(--mh-text-strong);
+}
+.mh-doi-unit[aria-pressed="true"] {
+  border-color: var(--mh-line-strong);
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+}
+
+/* While it waits for the strikes, the spot, then the prices and open interest. */
+.mh-doi-wait {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--mh-text-secondary);
+}
+
+/* A narrow panel: the three figures stack rather than squeeze. */
+@container (max-width: 420px) {
+  .mh-doi-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -13,7 +13,7 @@
 import type { PriceScale } from '../scale/price-scale';
 import type { TimeScale } from '../scale/time-scale';
 import type { DataLayer } from '../model/data-layer';
-import { contrastText } from './pill';
+import { contrastText, parseColor } from './pill';
 import {
   DEFAULT_TIMEZONE, IST_OFFSET_SECONDS, formatIstDate, formatIstTime, formatIstTimeSeconds,
   formatZonedDate, formatZonedTime, formatZonedTimeSeconds, isNewZonedDay,
@@ -105,8 +105,45 @@ export function priceTickCount(plotHeight: number): number {
   return Math.max(2, Math.min(30, Math.round(plotHeight / PRICE_LABEL_SPACING)));
 }
 
-/** Height of the last-price tag once the countdown adds its second row. */
-export const AXIS_TAG_HEIGHT_COUNTDOWN = 28;
+/**
+ * MarketHub fork: the countdown is its own box under the price tag, not a second row inside it,
+ * so the price tag (and the name box beside it) stays one row on the price line. These are that
+ * box's height and the gap above it, CSS px.
+ */
+export const COUNTDOWN_BOX_HEIGHT = 16;
+export const COUNTDOWN_BOX_GAP = 2;
+/** MarketHub fork: the gap between the countdown's unit boxes (hours, minutes, seconds), CSS px. */
+export const COUNTDOWN_SEGMENT_GAP = 2;
+
+/**
+ * MarketHub fork: the countdown as one two-digit field per unit, `[digits, unit]`: minutes and
+ * seconds, with hours in front while an hour or more is left. Null (nothing to count) reads `--`.
+ */
+export function countdownSegments(seconds: number | null): [string, string][] {
+  if (seconds === null || !Number.isFinite(seconds)) return [['--', 'm'], ['--', 's']];
+  // Rounded up, as `formatCountdown` does: the bar turns as 00s passes, not a second early.
+  const total = Math.max(0, Math.ceil(seconds));
+  const h = Math.floor(total / 3600);
+  const fields: [string, string][] = [[pad2(Math.floor((total % 3600) / 60)), 'm'], [pad2(total % 60), 's']];
+  return h > 0 ? [[pad2(h), 'h'], ...fields] : fields;
+}
+/** MarketHub fork: `color` with each channel scaled by `factor` (under 1 darkens), opaque; unparsable colours come back as they are. */
+function shade(color: string, factor: number): string {
+  const c = parseColor(color);
+  if (c === null) return color;
+  return `rgb(${Math.round(c.r * factor)}, ${Math.round(c.g * factor)}, ${Math.round(c.b * factor)})`;
+}
+
+/** Height of the last-price tag and its countdown box together, CSS px. */
+export const AXIS_TAG_HEIGHT_COUNTDOWN = AXIS_TAG_HEIGHT + COUNTDOWN_BOX_GAP + COUNTDOWN_BOX_HEIGHT;
+
+/**
+ * MarketHub fork: how far below the price the tag-and-countdown block's centre sits, device px.
+ * The price tag keeps the price line; the countdown hangs under it.
+ */
+export function countdownBlockOffset(dpr: number): number {
+  return ((AXIS_TAG_HEIGHT_COUNTDOWN - AXIS_TAG_HEIGHT) / 2) * dpr;
+}
 
 /**
  * How much of the price axis one label occupies, in device px, and how hard it
@@ -960,25 +997,58 @@ export function drawLastPriceTag(
   } else if (!withCountdown) {
     fillTag(ctx, xStart, y, boxH, padX, label, color, colors.text);
   } else {
-    const clock = formatCountdown(
-      barCountdownSeconds(countdown.lastBarTime, countdown.intervalSec, countdown.now()),
-    );
-    // A size down, so the price stays the headline and the countdown reads as
-    // the subtitle it is. `HH:MM:SS` is fixed width, so the tag does not
-    // breathe in and out once a second.
-    const clockFont = scaleFont(style.font, dpr * 0.9);
+    // MarketHub fork: the price tag is one row on the price line (moved down with its block when
+    // tags were spread: `atY` is the block's centre), and under it the countdown split into one box
+    // per unit (an hours box only while an hour or more is left), together as wide as the tag.
+    // Each box is the tag's colour a shade darker, solid, its digits centred with the unit after
+    // them in a smaller, lighter type; every box's ink is read off its own fill. Two-digit fields
+    // are fixed width, so the boxes do not breathe in and out once a second.
+    const left = barCountdownSeconds(countdown.lastBarTime, countdown.intervalSec, countdown.now());
+    const segments = countdownSegments(left);
+    const priceY = atY !== undefined ? atY - countdownBlockOffset(dpr) : y;
+    const priceH = lastPriceTagHeight(dpr);
+    const clockH = COUNTDOWN_BOX_HEIGHT * dpr;
+    const clockY = priceY + priceH / 2 + COUNTDOWN_BOX_GAP * dpr + clockH / 2;
+    const gap = COUNTDOWN_SEGMENT_GAP * dpr;
+    const digitFont = scaleFont(style.font, dpr * 0.92);
+    const unitFont = scaleFont(style.font, dpr * 0.72);
     const priceW = ctx.measureText(label).width;
-    ctx.font = clockFont;
-    const clockW = ctx.measureText(clock).width;
+    ctx.font = digitFont;
+    const digitW = ctx.measureText('00').width;
+    ctx.font = unitFont;
+    const unitW = ctx.measureText('m').width;
+    const unitGap = 1.5 * dpr;
+    const segPad = 4 * dpr;
+    const segMin = digitW + unitGap + unitW + segPad * 2;
+    const w = Math.max(priceW + padX * 2, segments.length * segMin + (segments.length - 1) * gap);
+    const x0 = xStart + 1;
+
+    ctx.textAlign = 'center';
     ctx.fillStyle = color;
-    fillTagBox(ctx, xStart + 1, y - boxH / 2, Math.max(priceW, clockW) + padX * 2, boxH);
-    ctx.fillStyle = colors.text;
-    // Rows at the quarter points: the price keeps the line the price line
-    // points at, and the countdown sits under it inside the same tag.
+    fillTagBox(ctx, x0, priceY - priceH / 2, w, priceH);
+    ctx.fillStyle = contrastText(color);
     ctx.font = priceFont;
-    ctx.fillText(label, xStart + 1 + padX, y - boxH / 4);
-    ctx.font = clockFont;
-    ctx.fillText(clock, xStart + 1 + padX, y + boxH / 4);
+    ctx.fillText(label, x0 + w / 2, priceY);
+
+    const clockFill = shade(color, 0.7);
+    const ink = contrastText(clockFill);
+    const segW = (w - (segments.length - 1) * gap) / segments.length;
+    ctx.textAlign = 'left';
+    for (let i = 0; i < segments.length; i++) {
+      const [digits, unit] = segments[i]!;
+      const sx = x0 + i * (segW + gap);
+      ctx.fillStyle = clockFill;
+      fillTagBox(ctx, sx, clockY - clockH / 2, segW, clockH);
+      // Digits and unit centred together as one word.
+      const textX = sx + (segW - (digitW + unitGap + unitW)) / 2;
+      ctx.fillStyle = ink;
+      ctx.font = digitFont;
+      ctx.fillText(digits, textX, clockY);
+      ctx.globalAlpha = 0.7;
+      ctx.font = unitFont;
+      ctx.fillText(unit, textX + digitW + unitGap, clockY + 0.5 * dpr);
+      ctx.globalAlpha = 1;
+    }
   }
   ctx.restore();
 }

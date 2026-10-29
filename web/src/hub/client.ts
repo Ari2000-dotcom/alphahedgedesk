@@ -69,6 +69,12 @@ export class Hub {
       set = new Set();
       this.topics.set(topic, set);
       this.queue("sub", topic);
+    } else if (!this.subQ.has(topic)) {
+      // Already live for another listener (a second chart on the same straddle): the hub sends a
+      // snapshot only on a "sub", so this one asks again. The others get the snapshot too, which
+      // replaces what they hold with the same thing.
+      this.queue("unsub", topic);
+      this.queue("sub", topic);
     }
     set.add(fn);
     return () => {
@@ -158,10 +164,14 @@ export class Hub {
     }
   }
 
-  /** A "sub" and an "unsub" of one topic in the same tick cancel out; the rest go in one message each. */
+  /**
+   * A "sub" then an "unsub" of one topic in the same tick cancel out; the rest go in one message
+   * each. An "unsub" then a "sub" (a panel remounting, as a view switch does) is sent as both, in
+   * that order: the new listener needs the hub's snapshot, and the hub only sends one on a "sub".
+   */
   private queue(kind: "sub" | "unsub", topic: string): void {
     if (kind === "sub") {
-      if (!this.unsubQ.delete(topic)) this.subQ.add(topic);
+      this.subQ.add(topic);
     } else if (!this.subQ.delete(topic)) {
       this.unsubQ.add(topic);
     }

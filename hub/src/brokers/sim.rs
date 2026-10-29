@@ -127,22 +127,27 @@ fn candles(key: &PieceKey) -> Vec<Candle> {
 /// Live ticks for subscribed `SIM:*` instruments, every `tick_ms`.
 pub async fn run_feed(hub: Arc<LiveHub>, mut rx: mpsc::UnboundedReceiver<FeedCmd>, tick_ms: u64) {
     let mut rng = StdRng::from_entropy();
-    let mut subs: HashMap<InstrumentId, (f64, f64)> = HashMap::new();
+    // Per instrument: price, cumulative volume, open interest, and price x volume traded (the
+    // running sum an average traded price divides by the volume).
+    let mut subs: HashMap<InstrumentId, (f64, f64, f64, f64)> = HashMap::new();
     let mut every = tokio::time::interval(Duration::from_millis(tick_ms));
     loop {
         tokio::select! {
             cmd = rx.recv() => match cmd {
-                Some(FeedCmd::Sub(id)) => { subs.entry(id).or_insert((1000.0, 0.0)); }
+                Some(FeedCmd::Sub(id)) => { subs.entry(id).or_insert((1000.0, 0.0, 250_000.0, 0.0)); }
                 Some(FeedCmd::Unsub(id)) => { subs.remove(&id); }
                 None => return,
             },
             _ = every.tick() => {
                 let now = chrono::Utc::now().timestamp_millis();
-                for (id, (px, vol)) in subs.iter_mut() {
+                for (id, (px, vol, oi, turnover)) in subs.iter_mut() {
                     *px = (*px + rng.gen_range(-0.5..0.5)).max(1.0);
-                    *vol += rng.gen_range(1.0f64..50.0).floor();
+                    let traded = rng.gen_range(1.0f64..50.0).floor();
+                    *vol += traded;
+                    *turnover += traded * *px;
+                    *oi = (*oi + rng.gen_range(-900.0f64..1000.0).floor()).max(0.0);
                     let ltp = (*px * 100.0).round() / 100.0;
-                    hub.publish(&Tick { id: id.clone(), ltp, volume: Some(*vol), bid: Some(ltp - 0.05), ask: Some(ltp + 0.05), oi: None, prev_oi: None, ts_ms: now, src: "sim", replay: false });
+                    hub.publish(&Tick { id: id.clone(), ltp, volume: Some(*vol), bid: Some(ltp - 0.05), ask: Some(ltp + 0.05), oi: Some(*oi), prev_oi: None, atp: Some((*turnover / *vol * 100.0).round() / 100.0), ts_ms: now, src: "sim", replay: false });
                 }
             }
         }

@@ -57,6 +57,11 @@ enabled = true
 # token is missing or expired. Paths are relative to this file.
 # Linux VPS: ["../.venv/bin/python", "../shoonya_auto_login.py"]
 login_cmd = ["../.venv/Scripts/python.exe", "../shoonya_auto_login.py"]
+# Which feed to ask Shoonya for. Both carry the price, the best bid/ask and, for options and
+# futures, open interest (which the website's delta x OI panel adds up); depth also carries the
+# five-deep ladder, so it is heavier per tick. Leave false unless the log says open interest is
+# not arriving on touchline — the feed says so by itself, once, with this line named.
+depth_feed = false
 
 [brokers.sim]
 # A simulated broker for load tests (loadtest/config.toml turns it on). Off on the live server.

@@ -1,0 +1,93 @@
+/*
+ * The "a new version is ready" toast (shell/UpdateToast.tsx), on the page's tokens.
+ *
+ * Bottom right, above the desk and clear of it: a card on the menu surface with the one soft drop
+ * menus get, a brand dot to catch the eye once, and the only ink button on the screen. It slides
+ * up once when it arrives and then sits still — nothing on a desk should pulse.
+ */
+
+.mh-update {
+  position: fixed;
+  z-index: 60;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius-card);
+  background: var(--mh-surface-1);
+  box-shadow: var(--mh-shadow-pop);
+  animation: mh-update-in var(--mh-dur) var(--mh-ease-out);
+}
+
+@keyframes mh-update-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mh-update {
+    animation: none;
+  }
+}
+
+.mh-update-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mh-brand);
+}
+
+.mh-update-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mh-update-title {
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+}
+.mh-update-text em {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  font-style: normal;
+}
+
+/* The one primary action on the page: ink, not colour. */
+.mh-update-go {
+  flex: none;
+  border-color: transparent;
+  background: var(--mh-primary-bg);
+  color: var(--mh-primary-text);
+}
+.mh-update-go:hover {
+  background: var(--mh-primary-hover);
+}
+.mh-update-go:active {
+  background: var(--mh-primary-pressed);
+}
+
+.mh-update-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+}
+.mh-update-close:hover {
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+}

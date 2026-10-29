@@ -18,6 +18,20 @@ export function black76(f: number, k: number, t: number, sigma: number, call: bo
   return call ? f * cdf(d1) - k * cdf(d2) : k * cdf(-d2) - f * cdf(-d1);
 }
 
+/**
+ * Delta of a call or put on the forward: the model's own delta (rate 0, so the forward's delta is
+ * the spot's). N(d1) for a call, N(d1) - 1 for a put, so a put's is negative — the sign the
+ * delta x OI panel adds up. Vol is annualised (0.14, not 14).
+ */
+export function delta76(f: number, k: number, t: number, sigma: number, call: boolean): number {
+  if (!(f > 0) || !(k > 0)) return 0;
+  const sd = sigma * Math.sqrt(t);
+  // At expiry, or with no vol, delta is the step: 1 in the money, 0 out of it.
+  if (!(sd > 0)) return call ? (f > k ? 1 : 0) : f < k ? -1 : 0;
+  const d1 = (Math.log(f / k) + (sd * sd) / 2) / sd;
+  return call ? cdf(d1) : cdf(d1) - 1;
+}
+
 /** Implied vol in percent, or null when the price sits outside what the model can reach. */
 export function impliedVol(price: number, f: number, k: number, t: number, call: boolean): number | null {
   if (!(price > 0) || !(f > 0) || !(k > 0) || !(t > 0)) return null;

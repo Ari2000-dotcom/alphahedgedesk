@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { CheckIcon, ChevronDownIcon } from "./icons";
+import { ChevronDownIcon } from "./icons";
 
 export interface DropdownOption<T extends string> {
   value: T;
@@ -10,15 +10,17 @@ export interface DropdownOption<T extends string> {
   icon?: ReactNode;
   /** The section it sits under (an expiry's month); a heading starts each run. */
   group?: string;
+  /** A thin rule above this item: TradingView's way of grouping a menu without headings. */
+  separator?: boolean;
 }
 
 /**
  * A pick-one menu. The trigger is QuantDesk's flat strip picker: what it picks
  * one ink tier down ("Expiry"), then the pick and a chevron, straight on the
  * strip with a wash on hover. With `icon` it is a round icon button instead
- * (the canvas picker). The list floats under it with a tick on the current
- * item. ↑/↓, Home/End move; Enter or a click picks; Escape, Tab or a click
- * outside closes.
+ * (the canvas picker). The list floats under it with the current item in the
+ * interaction blue. ↑/↓, Home/End move; Enter or a click picks; Escape, Tab or
+ * a click outside closes.
  */
 export function Dropdown<T extends string>({
   label,
@@ -155,6 +157,7 @@ export function Dropdown<T extends string>({
                     {o.group}
                   </li>
                 ) : null}
+                {o.separator && i > 0 ? <li role="separator" className="mh-menu-rule" /> : null}
                 <li
                   id={`${id}-${i}`}
                   role="option"
@@ -166,9 +169,6 @@ export function Dropdown<T extends string>({
                   {o.icon ? <span className="mh-menu-icon">{o.icon}</span> : null}
                   <span className="mh-menu-text">{o.label}</span>
                   {o.note ? <span className="mh-menu-note">{o.note}</span> : null}
-                  <span className="mh-menu-tick" aria-hidden>
-                    {o.value === value ? <CheckIcon size={14} /> : null}
-                  </span>
                 </li>
               </Fragment>
             ))}

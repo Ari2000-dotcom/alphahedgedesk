@@ -1,38 +1,97 @@
-import { useEffect, useRef } from "react";
-import { createChart, type Bar as OaBar, type Chart, type LinePoint, type PriceLine, type SeriesApi, type Whitespace } from "openalgo-charts";
+import { useEffect, useRef, useState } from "react";
+import { createChart, type Bar as OaBar, type Chart, type SeriesApi } from "openalgo-charts";
 
-import { fmt2 } from "../core/format";
+import { fmt0, fmt2 } from "../core/format";
 import { priceAxisWidth, themeFromPage, token } from "./chartTheme";
+import { isLineType, type ScripChartType } from "./chartType";
+import { INDICATORS, sessionAverage, type IndicatorId } from "./indicators";
 import { OiProfileBars, type OiBarLevel } from "./OiProfileBars";
 import type { OiProfileData, OiProfileMode } from "./useOiProfile";
 import { useChartPixelSnap } from "./useChartPixelSnap";
 
+/** A live trade: its price and the hub's timestamp, ms. */
+export interface LiveTick {
+  price: number;
+  ts: number;
+}
+
+/** TradingView's slightly rounded candle bodies, CSS px. */
+const BODY_RADIUS = 2;
+
+/** Today's session average (`sessionAverage`), over today's candles with `forming` standing in for
+ *  the last one; null when the latest candle is not today's (before the open, a holiday). */
+function todayAverage(candles: readonly OaBar[], forming: OaBar | null): number | null {
+  const istDay = (t: number) => Math.floor((t + 19_800) / 86_400);
+  const today = istDay(Date.now() / 1000);
+  const bars = candles.filter((b) => istDay(b.time) === today);
+  if (forming && istDay(forming.time) === today) {
+    if (bars.length > 0 && bars[bars.length - 1]!.time === forming.time) bars[bars.length - 1] = forming;
+    else bars.push(forming);
+  }
+  if (bars.length === 0) return null;
+  return sessionAverage(bars)[bars.length - 1]!;
+}
+
+/** The page's chart theme, with the price tag's up/down fill in the candles' own pair. */
+function themeFor(colors: { up: string; down: string }) {
+  return { ...themeFromPage(), lastPriceUp: colors.up, lastPriceDown: colors.down };
+}
+
+/** Halfway between the lowest low and the highest high: where a baseline chart puts its base. */
+function midpoint(bars: readonly OaBar[]): number {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const b of bars) {
+    if (b.low < lo) lo = b.low;
+    if (b.high > hi) hi = b.high;
+  }
+  return Number.isFinite(lo) ? (lo + hi) / 2 : 0;
+}
+
+/** A 6-digit hex colour at `alpha` (0..1); anything else is returned as it is. */
+function withAlpha(hex: string, alpha: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  return `${hex}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+}
+
 /**
- * A scrip's candles on openalgo-charts: price on the right axis, Wilder's ATR underneath on its
- * own pane, drawn the way every other chart in the app is (`chartTheme.ts`). Historical only —
- * no live tick aggregation into a forming candle yet, so a tab left open does not grow one — but
- * `live` still marks the real current price on the axis with its own dashed line, since the
- * latest CLOSED candle (the series' own last-value tag) can be well behind it. `oiProfile`, when
- * given, hangs call/put OI bars off the price axis (`OiProfileBars`), QuantDesk's way.
+ * A scrip's candles on openalgo-charts: price on the right axis, the picked indicators over the
+ * candles or in panes under them (`indicators.ts`), drawn the way every other chart in the app is
+ * (`chartTheme.ts`). Live ticks (`tick`) build the forming candle as TradingView does: each one
+ * moves its close, high and low, and the first past the interval opens the next candle, on the
+ * same grid as the hub's candles (stepped from the last one, so a 9:15 session keeps its 9:15,
+ * 9:20, ...). The price tag counts down to the candle's close. `oiProfile`, when given, hangs
+ * call/put OI bars off the price axis (`OiProfileBars`), QuantDesk's way; hovering one shows that
+ * strike's figures. `chartType` draws the price as candles, bars, a line or an area (`chartType.ts`);
+ * a line or an area reads each candle's close, in one colour.
  */
 export function ScripChart({
   candles,
-  atr,
-  period,
-  live,
-  prevClose,
+  chartType,
+  indicators,
+  tick,
+  atp,
+  stepSec,
+  name,
+  colors,
   oiProfile,
   oiMode,
   viewKey,
   themeKey,
 }: Readonly<{
   candles: readonly OaBar[];
-  atr: readonly (LinePoint | Whitespace)[];
-  period: number;
-  /** The real current price (today's last trade), independent of the chart's own interval. */
-  live: number | null;
-  /** Yesterday's close: which way `live` has moved, for its line's colour. */
-  prevClose: number | null;
+  chartType: ScripChartType;
+  indicators: readonly IndicatorId[];
+  /** The latest live trade (never the hub's replay of yesterday's), or null before one arrives. */
+  tick: LiveTick | null;
+  /** The exchange's average traded price today, from the live quote; null for an index (none). */
+  atp: number | null;
+  /** The interval, seconds: when the forming candle closes and the next one opens. */
+  stepSec: number;
+  /** The instrument's name, in a box beside its price tag. */
+  name: string;
+  colors: { up: string; down: string };
+  /** Null hides the profile. */
   oiProfile: OiProfileData | null;
   oiMode: OiProfileMode;
   viewKey: string;
@@ -42,12 +101,55 @@ export function ScripChart({
   const host = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const priceRef = useRef<SeriesApi | null>(null);
-  const atrRef = useRef<SeriesApi | null>(null);
-  const liveLineRef = useRef<PriceLine | null>(null);
+  /** The indicator lines on the chart now, by indicator. */
+  const linesRef = useRef(new Map<IndicatorId, SeriesApi>());
   const oiBarsRef = useRef<OiProfileBars | null>(null);
   const shownKey = useRef("");
+  /** The candle the next tick lands on: the hub's last one, then whatever ticks have made of it. */
+  const forming = useRef<OaBar | null>(null);
+  /** The ATP level: a one-point line series, so it takes the name box, value tag and dotted level
+   *  every other line on the chart has. */
+  const atpRef = useRef<SeriesApi | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; level: OiBarLevel } | null>(null);
 
   useChartPixelSnap(frame, host);
+
+  const candleStyle = (c: { up: string; down: string }) => ({
+    upColor: c.up,
+    downColor: c.down,
+    borderUpColor: c.up,
+    borderDownColor: c.down,
+    wickUpColor: c.up,
+    wickDownColor: c.down,
+  });
+  /** The price series' colours for `type`: candles and bars read the up/down pair, a line or an
+   *  area the line colour and its fill, a baseline the pair above and below its base. Area and
+   *  baseline share the fill keys, so each type sets them its own way. */
+  const priceStyle = (type: ScripChartType, c: { up: string; down: string }) => {
+    const line = token("--mh-line-fut");
+    if (type === "baseline") {
+      return {
+        ...candleStyle(c),
+        // No `color`: the library reads one as "a one-colour series" and paints the price tag in it.
+        color: undefined,
+        topColor: c.up,
+        bottomColor: c.down,
+        areaTopColor: withAlpha(c.up, 0.2),
+        areaBottomColor: withAlpha(c.down, 0.2),
+        baseValue: midpoint(candles),
+      };
+    }
+    return {
+      ...candleStyle(c),
+      // A line's tag is in the line's colour; candles and bars leave `color` unset, so their tag
+      // turns green or red with the candle, as TradingView's does.
+      color: isLineType(type) ? line : undefined,
+      closeColor: line,
+      areaTopColor: withAlpha(line, 0.28),
+      areaBottomColor: withAlpha(line, 0),
+    };
+  };
+  const lineColor = (color: string) => (color === "trend" ? colors.up : token(color));
 
   /* -- the chart, once ------------------------------------------------------------------------- */
   useEffect(() => {
@@ -55,73 +157,184 @@ export function ScripChart({
     if (!element) return;
     const chart = createChart(element, {
       timezone: "Asia/Kolkata",
-      theme: themeFromPage(),
+      theme: themeFor(colors),
       priceAxisWidth: priceAxisWidth(),
       crosshairSnapToBar: true,
       branding: false,
       navigation: { mousePan: "both" },
+      axisChrome: { barCountdown: true },
     });
     chartRef.current = chart;
-    priceRef.current = chart.addSeries("candlestick", {
+    priceRef.current = chart.addSeries(chartType, {
       paneIndex: 0,
       priceScaleId: "right",
       priceFormat: { type: "custom", formatter: fmt2 },
       style: {
-        upColor: token("--mh-up"),
-        downColor: token("--mh-down"),
-        borderUpColor: token("--mh-up"),
-        borderDownColor: token("--mh-down"),
-        wickUpColor: token("--mh-up"),
-        wickDownColor: token("--mh-down"),
+        ...priceStyle(chartType, colors),
+        bodyRadius: BODY_RADIUS,
+        title: name,
         lastValueVisible: true,
         priceLineVisible: true,
       },
     });
-    atrRef.current = chart.addSeries("line", {
-      paneIndex: 1,
-      priceScaleId: "right",
-      priceFormat: { type: "custom", formatter: fmt2 },
-      style: {
-        color: token("--mh-line-vix"),
-        lineWidth: 2,
-        title: `ATR ${period}`,
-        priceLineVisible: false,
-        lastValueVisible: true,
-      },
-    });
-    chart.setPaneWeight(0, 3);
-    chart.setPaneWeight(1, 1);
-    oiBarsRef.current = new OiProfileBars({ levels: [], mode: "oi", callColor: token("--mh-up"), putColor: token("--mh-down") });
+    oiBarsRef.current = new OiProfileBars({ levels: [], mode: oiMode, callColor: colors.up, putColor: colors.down });
     chart.addPrimitive(oiBarsRef.current, 0);
+    // The OI tooltip: only while the pointer is over a strike's bars on the price pane.
+    const unsubscribe = chart.subscribeCrosshairMove((e) => {
+      const level = e.point && e.paneIndex === 0 && !e.pressed ? oiBarsRef.current?.levelAt(e.point.x, e.point.y) ?? null : null;
+      setTip(level && e.point ? { x: e.point.x, y: e.point.y, level } : null);
+    });
     if (import.meta.env.DEV) (window as unknown as { __mhScripChart?: Chart }).__mhScripChart = chart;
+    const lines = linesRef.current;
     return () => {
+      unsubscribe();
       chart.destroy();
       chartRef.current = null;
       priceRef.current = null;
-      atrRef.current = null;
-      liveLineRef.current = null;
+      lines.clear();
+      atpRef.current = null;
       oiBarsRef.current = null;
       shownKey.current = "";
+      forming.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* -- data: a new picture every time (no live aggregation yet) ------------------------------- */
+  /** Folds `t` into the forming candle, or opens the next one once its interval is over. */
+  const apply = (t: LiveTick) => {
+    const price = priceRef.current;
+    const last = forming.current;
+    if (!price || !last) return;
+    const at = t.ts / 1000;
+    if (at < last.time) return; // older than the hub's own last candle: already in it
+    let next: OaBar;
+    if (at < last.time + stepSec) {
+      next = { ...last, high: Math.max(last.high, t.price), low: Math.min(last.low, t.price), close: t.price };
+    } else {
+      const time = last.time + Math.floor((at - last.time) / stepSec) * stepSec;
+      next = { time, open: t.price, high: t.price, low: t.price, close: t.price };
+    }
+    price.update(next);
+    forming.current = next;
+  };
+
+  /** Every indicator line's points from the candles on the chart. */
+  const fillLines = () => {
+    for (const [id, series] of linesRef.current) {
+      const def = INDICATORS.find((d) => d.id === id)!;
+      series.setData(def.points(candles, colors));
+    }
+  };
+
+  /* -- indicators: the picked lines, overlays on the candles and each oscillator in its own pane - */
+  const indicatorKey = indicators.join(",");
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    // Rebuilt whole: an oscillator's pane goes with it, and the panes under it move up a slot.
+    for (const series of linesRef.current.values()) series.remove();
+    linesRef.current.clear();
+    for (let i = chart.panes().length - 1; i >= 1; i--) chart.removePane(i, { force: true });
+    for (const def of INDICATORS) {
+      // A level (ATP) is a price line, drawn by its own effect below.
+      if (!indicators.includes(def.id) || def.place === "level") continue;
+      const paneIndex = def.place === "overlay" ? 0 : chart.panes().length;
+      const series = chart.addSeries("line", {
+        paneIndex,
+        priceScaleId: "right",
+        priceFormat: { type: "custom", formatter: fmt2 },
+        style: {
+          color: lineColor(def.color),
+          lineWidth: def.place === "overlay" ? 1 : 2,
+          title: def.name,
+          sessionBreaks: def.id === "avg",
+          priceLineVisible: false,
+          // Every line's value on the axis, in its colour with its name beside it, TradingView's way.
+          lastValueVisible: true,
+        },
+      });
+      if (paneIndex > 0) chart.setPaneWeight(paneIndex, 1);
+      linesRef.current.set(def.id, series);
+    }
+    chart.setPaneWeight(0, 3);
+    fillLines();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indicatorKey]);
+
+  /* -- data: the hub's candles, then the latest tick on top of them ----------------------------- */
   useEffect(() => {
     const chart = chartRef.current;
     const price = priceRef.current;
-    const atrSeries = atrRef.current;
-    if (!chart || !price || !atrSeries) return;
+    if (!chart || !price) return;
     price.setData(candles);
-    atrSeries.setData(atr);
+    if (chartType === "baseline") price.applyOptions({ baseValue: midpoint(candles) });
+    fillLines();
+    forming.current = candles[candles.length - 1] ?? null;
+    if (tick) apply(tick);
     if (shownKey.current !== viewKey) chart.fitContent();
     shownKey.current = viewKey;
-  }, [candles, atr, viewKey]);
+    // `tick` is applied here only to catch up a reload; its own effect follows it from here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles, viewKey]);
 
-  /* -- the ATR pane's title follows a changed period --------------------------------------------- */
+  /* -- live: every tick moves the forming candle ------------------------------------------------ */
   useEffect(() => {
-    atrRef.current?.applyOptions({ title: `ATR ${period}` });
-  }, [period]);
+    if (tick) apply(tick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
+
+  /* -- ATP: today's average traded price as a level across the chart, with its name box ("ATP")
+   *    and value tag on the axis like every other line. The exchange's figure when the quote
+   *    carries one; an index has none, so on an intraday chart it falls back to today's session
+   *    average from the candles (the forming one included), named "Avg" so the two are never
+   *    confused. A daily chart has no session to average. ---------------------------------------- */
+  const showAtp = indicators.includes("atp");
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    let price = showAtp ? atp : null;
+    let name = "ATP";
+    if (showAtp && price === null && stepSec < 86_400) {
+      price = todayAverage(candles, forming.current);
+      name = "Avg";
+    }
+    const at = forming.current?.time ?? candles[candles.length - 1]?.time;
+    if (price === null || at === undefined) {
+      atpRef.current?.remove();
+      atpRef.current = null;
+      return;
+    }
+    const color = token("--mh-amber");
+    if (!atpRef.current) {
+      atpRef.current = chart.addSeries("line", {
+        paneIndex: 0,
+        priceScaleId: "right",
+        priceFormat: { type: "custom", formatter: fmt2 },
+        style: { color, lineWidth: 1, title: name, lastValueVisible: true, priceLineVisible: true },
+      });
+    } else {
+      atpRef.current.applyOptions({ color, title: name });
+    }
+    // One point at the latest candle: the tag and the dotted level carry it, no line to draw.
+    atpRef.current.setData([{ time: at, value: price }]);
+    // `tick` moves the forming candle, and with it the fallback average.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAtp, atp, candles, tick, stepSec, themeKey]);
+
+  /* -- the chart type: the same series, drawn another way ------------------------------------- */
+  useEffect(() => {
+    const chart = chartRef.current;
+    const price = priceRef.current;
+    if (!chart || !price) return;
+    chart.setSeriesType(price, chartType);
+    price.applyOptions(priceStyle(chartType, colors));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartType]);
+
+  /* -- the price tag's name follows the instrument ---------------------------------------------- */
+  useEffect(() => {
+    priceRef.current?.applyOptions({ title: name });
+  }, [name]);
 
   /* -- the OI profile: call/put bars hung off the price axis ------------------------------------ */
   useEffect(() => {
@@ -135,54 +348,63 @@ export function ScripChart({
         }))
       : [];
     oiBarsRef.current?.setOptions({ levels, mode: oiMode });
+    if (levels.length === 0) setTip(null);
   }, [oiProfile, oiMode]);
 
-  /* -- the live price on the axis: its own dashed line, since the candle series' last-value tag
-   *    only ever shows the latest CLOSED candle, which can sit minutes or a whole day behind. ---- */
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-    if (live === null) {
-      if (liveLineRef.current) {
-        chart.removePrimitive(liveLineRef.current);
-        liveLineRef.current = null;
-      }
-      return;
-    }
-    const up = prevClose === null || live >= prevClose;
-    const color = token(up ? "--mh-up" : "--mh-down");
-    const label = `${fmt2(live)}  LTP`;
-    if (!liveLineRef.current) {
-      liveLineRef.current = chart.addPriceLine({ id: "live", price: live, color, label, lineWidth: 1, dashed: true }, 0);
-    } else {
-      liveLineRef.current.setPrice(live);
-      liveLineRef.current.setOptions({ color, label });
-    }
-  }, [live, prevClose, themeKey]);
-
-  /* -- the palette: the chart's ground, grid and series colours follow it ----------------------- */
+  /* -- the palette: the chart's ground and grid follow the page, the candles their preset ------- */
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       const chart = chartRef.current;
       if (!chart) return;
-      chart.setTheme(themeFromPage());
-      priceRef.current?.applyOptions({
-        upColor: token("--mh-up"),
-        downColor: token("--mh-down"),
-        borderUpColor: token("--mh-up"),
-        borderDownColor: token("--mh-down"),
-        wickUpColor: token("--mh-up"),
-        wickDownColor: token("--mh-down"),
-      });
-      atrRef.current?.applyOptions({ color: token("--mh-line-vix") });
-      oiBarsRef.current?.setOptions({ callColor: token("--mh-up"), putColor: token("--mh-down") });
+      chart.setTheme(themeFor(colors));
+      priceRef.current?.applyOptions(priceStyle(chartType, colors));
+      for (const [id, series] of linesRef.current) series.applyOptions({ color: lineColor(INDICATORS.find((d) => d.id === id)!.color) });
+      // Supertrend's points carry the up/down colours themselves.
+      if (linesRef.current.has("supertrend")) fillLines();
+      oiBarsRef.current?.setOptions({ callColor: colors.up, putColor: colors.down });
     });
     return () => cancelAnimationFrame(raf);
-  }, [themeKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeKey, colors.up, colors.down]);
 
   return (
     <div className="oa-chart-frame" ref={frame}>
-      <div ref={host} className="oa-chart" aria-label="Candlestick chart with an ATR indicator pane" />
+      <div ref={host} className="oa-chart" aria-label="Price chart with indicators" />
+      {tip ? <OiTip {...tip} colors={colors} /> : null}
+    </div>
+  );
+}
+
+const signed = (v: number) => (Number.isFinite(v) ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt0(Math.abs(v))}` : "—");
+const whole = (v: number) => (Number.isFinite(v) ? fmt0(v) : "—");
+
+/** One strike's open interest, beside the pointer: call and put, each with today's change. */
+function OiTip({ x, y, level, colors }: Readonly<{ x: number; y: number; level: OiBarLevel; colors: { up: string; down: string } }>) {
+  return (
+    // Left of the pointer: the bars hang off the right axis, so there is always room that side.
+    <div className="mh-oi-tip" style={{ right: `calc(100% - ${x - 12}px)`, top: y }} role="tooltip">
+      <div className="mh-oi-tip-head">{fmt2(level.price)}</div>
+      <table>
+        <thead>
+          <tr>
+            <th />
+            <th>OI</th>
+            <th>Chg</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th style={{ color: colors.up }}>Call</th>
+            <td>{whole(level.call)}</td>
+            <td>{signed(level.callChange)}</td>
+          </tr>
+          <tr>
+            <th style={{ color: colors.down }}>Put</th>
+            <td>{whole(level.put)}</td>
+            <td>{signed(level.putChange)}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }

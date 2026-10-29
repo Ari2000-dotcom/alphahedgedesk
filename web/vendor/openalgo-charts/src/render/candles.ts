@@ -29,6 +29,8 @@ export interface CandleStyle {
   bodyVisible?: boolean;
   /** Draw up-candle bodies as outlines only (hollow candles). */
   hollow?: boolean;
+  /** MarketHub fork: body corner radius, CSS px (`SeriesStyle.bodyRadius`). */
+  bodyRadius?: number;
   /**
    * "Color bars based on previous close": a bar is up when it closed above the
    * bar before it rather than above its own open. Body, border and wick all
@@ -66,6 +68,7 @@ export function resolveCandleStyle(s: SeriesStyle, theme: ChartTheme, extra: Par
     wickDownColor: s.wickDownColor ?? theme.wickDownColor,
     borderVisible: s.borderVisible ?? DEFAULT_CANDLE_STYLE.borderVisible,
     bodyVisible: s.bodyVisible ?? true,
+    bodyRadius: s.bodyRadius,
     wickVisible: s.wickVisible ?? DEFAULT_CANDLE_STYLE.wickVisible,
     // Unset stays unset: the renderer reads only `=== true`.
     colorByPreviousClose: s.colorByPreviousClose,
@@ -251,6 +254,23 @@ export function drawCandles(
 
     const top = Math.min(yOpen, yClose);
     const bodyH = Math.max(1, Math.abs(yClose - yOpen));
+
+    // MarketHub fork: a rounded body, TradingView's look, once it is wide enough to show it.
+    const radius = style.bodyRadius && w >= 4 ? Math.min(style.bodyRadius * dpr, w / 2, bodyH / 2) : 0;
+    if (radius >= 1 && !(style.hollow && up) && style.bodyVisible !== false) {
+      ctx.beginPath();
+      ctx.roundRect(cx - halfW, top, w, bodyH, radius);
+      ctx.fillStyle = color;
+      ctx.fill();
+      if (style.borderVisible && borderColor !== color) {
+        ctx.beginPath();
+        ctx.roundRect(cx - halfW + 0.5, top + 0.5, w - 1, bodyH - 1, Math.max(0, radius - 0.5));
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      continue;
+    }
 
     if (style.hollow && up) {
       // Hollow up candle: the outline is the body, so it is drawn whether or not

@@ -35,6 +35,8 @@ Every change is marked `MarketHub fork` in the source.
 | TradingView's dotted price line (dots a line width long, two apart) | `render/axis.ts` |
 | `SeriesStyle.sessionBreaks`: a line series lifts the pen at each new trading session (read from the bars' overnight gaps), so a session VWAP draws no jump from one day's last value to the next day's first | `render/series-style.ts`, `render/line.ts` |
 | Tags, name boxes and crosshair chips with TradingView's slightly rounded corners | `render/axis.ts` (`fillTagBox`), `render/crosshair.ts` |
+| `SeriesStyle.bodyRadius`: candle bodies with rounded corners, shrunk to fit a small body and square below 4 device px | `render/series-style.ts`, `render/candles.ts` |
+| The bar countdown under the last-price tag in its own boxes, one per unit (`02m` `07s`, hours in front while an hour or more is left), a shade darker, not a second row inside the tag: the tag and the name box beside it stay one row on the price line, and tag spreading reserves the room for both | `render/axis.ts` (`COUNTDOWN_BOX_HEIGHT`, `countdownSegments`, `countdownBlockOffset`, `drawLastPriceTag`), `core/pane.ts` |
 
 ## Taking a newer upstream release
 

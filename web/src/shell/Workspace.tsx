@@ -10,6 +10,7 @@ import {
 } from "dockview";
 
 import { dayLabel } from "../core/format";
+import { DeltaOiPanel } from "../greeks/DeltaOiPanel";
 import type { Hub } from "../hub/client";
 import { readPick, StraddlePage, type Pick } from "../straddle/StraddlePage";
 import { DetailsPanel, TablePanel } from "../desk/panels";
@@ -75,7 +76,7 @@ function titleOf(pick: Pick | null | undefined, autoPick?: string): string {
 
 // One sequence for every "+" and preset, so two panels made in one millisecond cannot collide.
 let counter = 0;
-export type PanelKind = "straddle" | "chain" | "table" | "details" | "scrip";
+export type PanelKind = "straddle" | "chain" | "deltaoi" | "table" | "details" | "scrip";
 const nextId = (kind: PanelKind = "straddle") => `${kind}-${++counter}-${Date.now()}`;
 
 interface ChainParams {
@@ -129,6 +130,22 @@ function ChainDockPanel({ api, params }: IDockviewPanelProps<ChainParams>) {
   );
 }
 
+function DeltaOiDockPanel({ api, params }: IDockviewPanelProps<ChainParams>) {
+  const desk = useContext(Desk);
+  if (!desk) return null;
+  return (
+    <DeltaOiPanel
+      hub={desk.hub}
+      initialPick={params.pick}
+      onPick={(pick) => {
+        const title = pick ? `Δ×OI · ${pick.underlying.name}` : "Delta × OI";
+        if (api.title !== title) api.setTitle(title);
+        api.updateParameters({ pick });
+      }}
+    />
+  );
+}
+
 function TableDockPanel() {
   return <TablePanel />;
 }
@@ -155,7 +172,7 @@ function ScripDockPanel({ api, params }: IDockviewPanelProps<ScripParams>) {
   );
 }
 
-const COMPONENTS = { straddle: StraddlePanel, chain: ChainDockPanel, table: TableDockPanel, details: DetailsDockPanel, scrip: ScripDockPanel };
+const COMPONENTS = { straddle: StraddlePanel, chain: ChainDockPanel, table: TableDockPanel, details: DetailsDockPanel, deltaoi: DeltaOiDockPanel, scrip: ScripDockPanel };
 
 /* -- a tab: icon, title, a close button that shows on hover ----------------------------------- */
 
@@ -272,12 +289,14 @@ export function addPanelOf(api: DockviewApi, kind: PanelKind, position: Position
   const panel =
     kind === "chain"
       ? api.addPanel({ id: nextId("chain"), component: "chain", title: "Option chain", params: { pick: readPick() } satisfies ChainParams, position })
-      : kind === "table"
-        ? api.addPanel({ id: nextId("table"), component: "table", title: "All straddles", position })
-        : kind === "details"
-          ? api.addPanel({ id: nextId("details"), component: "details", title: "ATM straddle", position })
-          : kind === "scrip"
-            ? api.addPanel({ id: nextId("scrip"), component: "scrip", title: "Chart", params: {} satisfies ScripParams, position })
+      : kind === "deltaoi"
+        ? api.addPanel({ id: nextId("deltaoi"), component: "deltaoi", title: "Delta × OI", params: { pick: readPick() } satisfies ChainParams, position })
+        : kind === "table"
+          ? api.addPanel({ id: nextId("table"), component: "table", title: "All straddles", position })
+          : kind === "details"
+            ? api.addPanel({ id: nextId("details"), component: "details", title: "ATM straddle", position })
+            : kind === "scrip"
+              ? api.addPanel({ id: nextId("scrip"), component: "scrip", title: "Chart", params: {} satisfies ScripParams, position })
             : api.addPanel({ id: nextId(), component: "straddle", title: "New straddle", params: { pick: null } satisfies StraddleParams, position });
   panel.api.setActive();
   return panel;
@@ -289,6 +308,7 @@ export const PANEL_KINDS: readonly { kind: PanelKind; name: string; note: string
   { kind: "straddle", name: "Straddle chart", note: "Compare up to 5" },
   { kind: "chain", name: "Option chain", note: "Add strikes" },
   { kind: "scrip", name: "Scrip chart", note: "Candles + ATR" },
+  { kind: "deltaoi", name: "Delta × OI", note: "Call and put exposure" },
   { kind: "table", name: "All straddles", note: "Table" },
   { kind: "details", name: "ATM straddle", note: "Details" },
 ];

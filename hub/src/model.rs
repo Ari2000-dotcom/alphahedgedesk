@@ -100,6 +100,9 @@ pub struct Tick {
     /// Yesterday's closing open interest, when the feed sends it: `oi - prev_oi` is today's
     /// change without a second lookup, the OI profile's "change" mode.
     pub prev_oi: Option<f64>,
+    /// Today's average traded price from the exchange (volume-weighted), when the feed sends it:
+    /// futures, options and shares carry one, an index never does.
+    pub atp: Option<f64>,
     pub ts_ms: i64,
     pub src: &'static str,
     /// The broker repeating its last known state (Shoonya's reply to a subscribe),

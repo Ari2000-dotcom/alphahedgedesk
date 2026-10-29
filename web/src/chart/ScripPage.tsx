@@ -6,24 +6,53 @@ import { useUniverse } from "../core/universe";
 import type { Hub } from "../hub/client";
 import type { TopicMessage } from "../hub/types";
 import { Dropdown } from "../ui/Dropdown";
-import { AlertIcon, ChartIcon, Spinner } from "../ui/icons";
+import {
+  AlertIcon,
+  AreaChartIcon,
+  BaselineIcon,
+  CandlesIcon,
+  ChartIcon,
+  EyeOffIcon,
+  HighLowIcon,
+  HlcAreaIcon,
+  HollowCandlesIcon,
+  IndicatorsIcon,
+  LineChartIcon,
+  LineMarkersIcon,
+  OhlcBarsIcon,
+  OiBothIcon,
+  OiChangeIcon,
+  OiTotalIcon,
+  Spinner,
+  StepLineIcon,
+} from "../ui/icons";
 import { MultiDropdown } from "../ui/MultiDropdown";
 import { ATR_PERIOD, atrPoints, CANDLE_INTERVALS, useCandles } from "./useCandles";
 import { useOiProfile, type OiProfileMode } from "./useOiProfile";
-import { ScripChart } from "./ScripChart";
+import { ScripChart, type LiveTick } from "./ScripChart";
+import { CANDLE_PALETTES, paletteColors, useCandlePalette } from "./candlePalette";
+import { CHART_TYPES, isLineType, useChartType, type ScripChartType } from "./chartType";
+import { INDICATORS, useIndicators } from "./indicators";
 
 /**
  * Pick any NSE/BSE index or MCX commodity and an interval: its candles on openalgo-charts, price
- * on the right axis, Wilder's ATR underneath, and the OI profile of one or more expiries hung off
- * the price axis, QuantDesk's way (`useOiProfile`, `OiProfileBars`). Candles are historical for
- * now — see `ScripChart`.
+ * on the right axis, the indicators picked from the Indicators menu (`indicators.ts`), and the OI
+ * profile of one or more expiries hung off the price axis, QuantDesk's way (`useOiProfile`,
+ * `OiProfileBars`). Live trades build the forming candle (`ScripChart`).
  */
 
 const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
 const DEFAULT_INTERVAL = "1d";
-const OI_MODES: readonly { value: OiProfileMode; label: string }[] = [
-  { value: "oi", label: "OI" },
-  { value: "change", label: "OI chg" },
+type OiView = OiProfileMode | "off";
+const OI_VIEWS: readonly {
+  value: OiView;
+  label: string;
+  Icon: typeof OiBothIcon;
+}[] = [
+  { value: "both", label: "Total OI with today's change", Icon: OiBothIcon },
+  { value: "oi", label: "Total OI", Icon: OiTotalIcon },
+  { value: "change", label: "Today's OI change", Icon: OiChangeIcon },
+  { value: "off", label: "Hide the OI profile", Icon: EyeOffIcon },
 ];
 
 export interface ScripPick {
@@ -66,7 +95,8 @@ export function ScripPage({
   // The OI profile's picked expiries: the nearest one the moment an underlying is picked, free to
   // change from there — QuantDesk's `pickedExpiries` (none still listed falls back to the nearest).
   const [expiries, setExpiries] = useState<string[]>([]);
-  const [oiMode, setOiMode] = useState<OiProfileMode>("oi");
+  const [oiView, setOiView] = useState<OiView>("both");
+  const [indicators, setIndicators] = useIndicators();
   const allExpiries = underlyingOf.get(id)?.expiries ?? [];
   const allExpiriesKey = allExpiries.join(",");
   useEffect(() => {
@@ -77,7 +107,8 @@ export function ScripPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, allExpiriesKey]);
   const pickedExpiries = expiries.filter((e) => allExpiries.includes(e));
-  const { data: oiProfile } = useOiProfile(hub, id, pickedExpiries);
+  // Hidden asks the hub for nothing: no expiries, no profile.
+  const { data: oiProfile } = useOiProfile(hub, id, oiView === "off" ? [] : pickedExpiries);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
   const { candles, loading, error, note } = useCandles(id, spec.value, spec.days);
@@ -103,17 +134,32 @@ export function ScripPage({
     };
   }, [id]);
 
-  // Today's real last price, live — the candle series' own last-value tag is only ever the
-  // latest CLOSED candle, which can sit well behind the live tick.
+  // Today's real last price, live, for the readout; and each live trade for the forming candle.
+  // The hub's replay of the last known state (yesterday's, before the open) moves the readout but
+  // builds no candle.
   const [live, setLive] = useState<number | null>(null);
+  const [tick, setTick] = useState<LiveTick | null>(null);
+  // The exchange's average traded price today (a future, an option, a share; never an index).
+  const [atp, setAtp] = useState<number | null>(null);
   useEffect(() => {
     setLive(null);
+    setTick(null);
+    setAtp(null);
     if (!id) return;
     return hub.subscribe(`quote:${id}`, (msg: TopicMessage) => {
-      const p = (msg as { ltp?: number }).ltp;
-      if (msg.t === "q" && typeof p === "number" && p > 0) setLive(p);
+      const q = msg as { ltp?: number; ts?: number; replay?: boolean; atp?: number };
+      if (msg.t !== "q" || typeof q.ltp !== "number" || q.ltp <= 0) return;
+      setLive(q.ltp);
+      // Not from the replay: before the open it is yesterday's session, and the line is today's.
+      if (!q.replay && typeof q.atp === "number" && q.atp > 0) setAtp(q.atp);
+      if (!q.replay && typeof q.ts === "number") setTick({ price: q.ltp, ts: q.ts });
     });
   }, [hub, id]);
+
+  const [chartType, setChartType] = useChartType();
+  const [paletteId, setPaletteId] = useCandlePalette();
+  // The desk preset reads the theme's tokens, so a theme change resolves it again.
+  const colors = useMemo(() => paletteColors(paletteId), [paletteId, themeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const last = live ?? candles[candles.length - 1]?.close ?? null;
   const chg = last !== null && prevClose !== null ? last - prevClose : null;
@@ -127,7 +173,7 @@ export function ScripPage({
   return (
     <div className="mh-page">
       <section className="mh-container" aria-label="Scrip chart">
-        <div className="mh-strip">
+        <div className="mh-strip mh-tv-strip">
           <Dropdown
             label="Underlying"
             caption={false}
@@ -144,16 +190,58 @@ export function ScripPage({
             }
             options={underlyingOptions}
           />
-          <Dropdown
-            label="Interval"
-            caption={false}
-            value={interval}
-            onChange={setInterval_}
-            renderValue={(o) => o?.label ?? null}
-            options={CANDLE_INTERVALS.map((c) => ({ value: c.value, label: c.label }))}
-          />
+          <span className="mh-tv-sep" aria-hidden />
+          {/* TradingView's toolbar: no chevron on the interval, the chart type, the candles or the indicators. */}
+          <span className="mh-tv-bare">
+            <Dropdown
+              label="Interval"
+              caption={false}
+              value={interval}
+              onChange={setInterval_}
+              renderValue={(o) => o?.label ?? null}
+              options={CANDLE_INTERVALS.map((c) => ({ value: c.value, label: c.label, separator: c.value === "1d" }))}
+            />
+            <span className="mh-tv-sep" aria-hidden />
+            <Dropdown
+              label="Chart type"
+              caption={false}
+              value={chartType}
+              onChange={setChartType}
+              renderValue={() => <ChartTypeIcon type={chartType} />}
+              options={CHART_TYPES.map((t) => ({ value: t.id, label: t.name, icon: <ChartTypeIcon type={t.id} />, separator: t.group }))}
+            />
+            {/* A line or an area draws in one colour: the up/down pair only means something to candles and bars. */}
+            {isLineType(chartType) ? null : (
+              <Dropdown
+                label="Candles"
+                caption={false}
+                value={paletteId}
+                onChange={setPaletteId}
+                renderValue={() => <Swatch up={colors.up} down={colors.down} />}
+                options={CANDLE_PALETTES.map((p) => {
+                  const c = paletteColors(p.id);
+                  return { value: p.id, label: p.name, icon: <Swatch up={c.up} down={c.down} /> };
+                })}
+              />
+            )}
+            <span className="mh-tv-sep" aria-hidden />
+            <MultiDropdown
+              label="Indicators"
+              caption={false}
+              value={indicators}
+              onChange={setIndicators}
+              renderValue={(picked) => (
+                <span className="mh-ind-trigger">
+                  <IndicatorsIcon size={16} /> Indicators
+                  {picked.length > 0 ? <span className="mh-ind-count">{picked.length}</span> : null}
+                </span>
+              )}
+              options={INDICATORS.map((d) => ({ value: d.id, label: d.name, note: d.note }))}
+            />
+          </span>
           {id && allExpiries.length > 0 ? (
             <>
+              <span className="mh-tv-sep" aria-hidden />
               <MultiDropdown
                 label="Expiry"
                 caption={false}
@@ -168,14 +256,16 @@ export function ScripPage({
                 }
                 options={allExpiries.map((e) => ({ value: e, label: dayLabel(e) }))}
               />
-              <Dropdown
-                label="OI"
-                caption={false}
-                value={oiMode}
-                onChange={setOiMode}
-                renderValue={(o) => o?.label ?? null}
-                options={OI_MODES}
-              />
+              <div className="mh-oi-views" role="group" aria-label="OI profile">
+                <span className="mh-oi-caption" aria-hidden>
+                  OI
+                </span>
+                {OI_VIEWS.map(({ value, label, Icon }) => (
+                  <button key={value} type="button" className="mh-oi-view" aria-pressed={oiView === value} aria-label={label} title={label} onClick={() => setOiView(value)}>
+                    <Icon size={16} />
+                  </button>
+                ))}
+              </div>
             </>
           ) : null}
           <span className="mh-spacer" />
@@ -205,12 +295,15 @@ export function ScripPage({
           {id && candles.length > 0 ? (
             <ScripChart
               candles={candles}
-              atr={atr}
-              period={ATR_PERIOD}
-              live={live}
-              prevClose={prevClose}
-              oiProfile={oiProfile}
-              oiMode={oiMode}
+              chartType={chartType}
+              indicators={indicators}
+              tick={tick}
+              atp={atp}
+              stepSec={spec.seconds}
+              name={underlyingOf.get(id)?.name ?? id}
+              colors={colors}
+              oiProfile={oiView === "off" ? null : oiProfile}
+              oiMode={oiView === "off" ? "both" : oiView}
               viewKey={viewKey}
               themeKey={themeKey}
             />
@@ -238,7 +331,7 @@ export function ScripPage({
                 <ChartIcon size={28} />
               </span>
               <div className="mh-empty-title">Pick an underlying</div>
-              <div className="mh-empty-text">Candles with price on the right axis, Wilder's ATR underneath.</div>
+              <div className="mh-empty-text">Candles with price on the right axis, and the indicators you pick.</div>
               <div className="mh-quick">
                 {QUICK.map((name) => (
                   <button key={name} type="button" className="mh-btn" disabled={universe.length === 0} onClick={() => quickPick(name)}>
@@ -252,4 +345,33 @@ export function ScripPage({
       </section>
     </div>
   );
+}
+
+/** A candle preset's pair: an up candle beside a down one. */
+function Swatch({ up, down }: Readonly<{ up: string; down: string }>) {
+  return (
+    <span className="mh-swatch" aria-hidden>
+      <i style={{ background: up }} />
+      <i style={{ background: down }} />
+    </span>
+  );
+}
+
+const TYPE_ICONS: Record<ScripChartType, typeof CandlesIcon> = {
+  bar: OhlcBarsIcon,
+  candlestick: CandlesIcon,
+  "hollow-candle": HollowCandlesIcon,
+  line: LineChartIcon,
+  "line-markers": LineMarkersIcon,
+  step: StepLineIcon,
+  area: AreaChartIcon,
+  "hlc-area": HlcAreaIcon,
+  baseline: BaselineIcon,
+  "high-low": HighLowIcon,
+};
+
+/** A chart type's picture, as TradingView's chart-type button shows it. */
+function ChartTypeIcon({ type }: Readonly<{ type: ScripChartType }>) {
+  const Icon = TYPE_ICONS[type];
+  return <Icon size={18} />;
 }

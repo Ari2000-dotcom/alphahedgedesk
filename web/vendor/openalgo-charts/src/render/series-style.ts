@@ -19,6 +19,11 @@ export interface SeriesStyle {
   /** Paint candle bodies. Off leaves outline and wick. Default true. */
   bodyVisible?: boolean;
   /**
+   * MarketHub fork: corner radius of a candle body, CSS px. Shrinks to fit a narrow or short
+   * body, and a body under 4 device px wide stays square. Default 0.
+   */
+  bodyRadius?: number;
+  /**
    * Has no effect: no renderer reads it, and a `candlestick` series with it set
    * draws filled candles.
    *

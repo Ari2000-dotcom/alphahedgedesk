@@ -12,13 +12,15 @@ export interface CandleInterval {
   value: string;
   label: string;
   days: number;
+  /** One candle, seconds: when a live candle closes and the next opens. */
+  seconds: number;
 }
 
 export const CANDLE_INTERVALS: readonly CandleInterval[] = [
-  { value: "5m", label: "5m", days: 15 },
-  { value: "15m", label: "15m", days: 30 },
-  { value: "60m", label: "1h", days: 60 },
-  { value: "1d", label: "1D", days: 90 },
+  { value: "5m", label: "5m", days: 15, seconds: 300 },
+  { value: "15m", label: "15m", days: 30, seconds: 900 },
+  { value: "60m", label: "1h", days: 60, seconds: 3600 },
+  { value: "1d", label: "1D", days: 90, seconds: 86_400 },
 ];
 
 export const ATR_PERIOD = 14;

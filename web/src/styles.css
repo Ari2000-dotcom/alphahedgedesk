@@ -30,6 +30,37 @@ body {
   overflow: hidden;
 }
 
+/* Scrollbars, TradingView's way, everywhere: a slim rounded thumb with no track and no arrows,
+   faint until it is reached for. The thumb is 4px drawn inside an 8px lane (a transparent border
+   pads it), so it is easy to grab without taking the room a system bar does. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mh-text-tertiary) 30%, transparent) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--mh-text-tertiary) 55%, transparent);
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+/* Firefox has no ::-webkit-scrollbar; its own two properties come closest. Kept to browsers
+   without the pseudo-elements, since Chrome lets these override them. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--mh-text-tertiary) 35%, transparent) transparent;
+  }
+}
+
 body {
   background: var(--mh-workspace);
   color: var(--mh-text-primary);
@@ -454,6 +485,150 @@ input {
   font-weight: var(--mh-weight-emphasis);
 }
 
+/* A candle colour preset: an up and a down candle body side by side. */
+.mh-swatch {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+.mh-swatch i {
+  width: 5px;
+  height: 12px;
+  border-radius: 1.5px;
+}
+
+/* -- the scrip chart's toolbar, TradingView's way ----------------------------------------------
+   Quiet: regular-weight text a step below full strength, a faint wash on hover, a thin rule
+   between groups, and a chevron only where the pick is a list worth opening (the symbol, the
+   expiry). */
+.mh-tv-strip {
+  gap: 0;
+}
+.mh-tv-strip .mh-picker {
+  height: 30px;
+  padding: 0 8px;
+  color: var(--mh-text-primary);
+}
+.mh-tv-strip .mh-picker-value {
+  font-weight: var(--mh-weight-regular);
+}
+.mh-tv-strip .mh-picker:hover,
+.mh-tv-strip .mh-picker[aria-expanded="true"] {
+  background: var(--mh-hover-wash);
+  color: var(--mh-text-strong);
+}
+.mh-tv-strip .mh-picker > svg {
+  width: 11px;
+  height: 11px;
+  opacity: 0.7;
+}
+.mh-tv-bare {
+  display: contents;
+}
+.mh-tv-bare .mh-picker > svg {
+  display: none;
+}
+.mh-tv-sep {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--mh-line-strong);
+}
+
+/* Indicators: TradingView's fx and the word; how many are on, quietly after it. */
+.mh-ind-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mh-ind-count {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+
+/* The OI profile's views: one segmented control, its caption first, the view showing raised. */
+.mh-oi-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 28px;
+  margin-left: 6px;
+  padding: 2px;
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-surface-1);
+}
+.mh-oi-caption {
+  padding: 0 6px 0 5px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  letter-spacing: 0.02em;
+}
+.mh-oi-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border: 0;
+  border-radius: calc(var(--mh-radius-small) - 1px);
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-oi-view:hover {
+  color: var(--mh-text-primary);
+}
+/* The view showing: TradingView's blue, so the pick is read at a glance, not by comparing greys. */
+.mh-oi-view[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--mh-dock-accent) 18%, transparent);
+  color: var(--mh-dock-accent);
+}
+
+.mh-oi-view:focus-visible {
+  outline: 1px solid var(--mh-text-tertiary);
+  outline-offset: 1px;
+}
+
+/* One strike's OI beside the pointer, shown only while it is over that strike's bars. */
+.mh-oi-tip {
+  position: absolute;
+  z-index: 5;
+  transform: translateY(-50%);
+  padding: 6px 8px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-caption);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.mh-oi-tip-head {
+  margin-bottom: 4px;
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-oi-tip table {
+  border-collapse: collapse;
+}
+.mh-oi-tip th,
+.mh-oi-tip td {
+  padding: 1px 0 1px 12px;
+  text-align: right;
+  font-weight: var(--mh-weight-regular);
+}
+.mh-oi-tip th:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+.mh-oi-tip thead th {
+  color: var(--mh-text-tertiary);
+}
+
 /* -- a strip picker: flat, caption then value, a wash on hover --------------- */
 
 /* The straddle strip's pickers read a step up, with the readouts beside them. A value and its
@@ -520,14 +695,19 @@ input {
 
 /* -- menus: search results and every dropdown -------------------------------- */
 
+/* -- menus, TradingView's way ------------------------------------------------------------------
+   A plain panel: a small radius, a hairline edge and one soft shadow. Rows sit inset with rounded
+   corners, an icon then the label; the row under the pointer is washed, and the pick of a
+   pick-one menu is inverted (solid ink, ground-coloured text), which is how TradingView marks it.
+   Thin rules group the rows (`separator`), no headings. A pick-many menu has a checkbox per row. */
 .mh-menu {
   margin: 0;
-  padding: 4px;
+  padding: 6px;
   list-style: none;
   border: 1px solid var(--mh-line-strong);
-  border-radius: var(--mh-radius-card);
+  border-radius: var(--mh-radius);
   background: var(--mh-surface-1);
-  box-shadow: var(--mh-shadow-pop);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
 }
 .mh-results {
   position: absolute;
@@ -542,15 +722,18 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 10px;
   border-radius: var(--mh-radius);
   color: var(--mh-text-primary);
+  font-size: var(--mh-size-control);
   cursor: pointer;
+  user-select: none;
 }
+.mh-menu-item:hover,
 .mh-results .mh-menu-item[aria-selected="true"],
 .mh-menu-item.mh-active {
-  background: var(--mh-surface-2);
+  background: var(--mh-hover-wash);
   color: var(--mh-text-strong);
 }
 .mh-menu-status {
@@ -574,34 +757,40 @@ input {
 .mh-pop {
   position: absolute;
   z-index: 30;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   left: 0;
   min-width: max(100%, 220px);
   animation: mh-pop var(--mh-dur-pop) var(--mh-ease-out);
-  transform-origin: top left;
 }
 .mh-end > .mh-pop {
   left: auto;
   right: 0;
-  transform-origin: top right;
 }
+/* A quick fade in place: a menu is furniture, not an event. */
 @keyframes mh-pop {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translateY(-2px);
   }
+}
+.mh-menu-rule {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--mh-line-strong);
 }
 .mh-menu-heading,
 .mh-menu-group {
   padding: 8px 10px 4px;
   color: var(--mh-text-tertiary);
-  font-size: var(--mh-size-caption);
-  font-weight: var(--mh-weight-emphasis);
+  font-size: var(--mh-size-micro);
+  font-weight: var(--mh-weight-regular);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .mh-menu-group:not(:first-child) {
   margin-top: 4px;
   border-top: 1px solid var(--mh-line);
-  padding-top: 10px;
+  padding-top: 8px;
 }
 .mh-menu-list {
   max-height: 340px;
@@ -610,30 +799,55 @@ input {
   list-style: none;
   overflow: auto;
   outline: none;
-  scrollbar-width: thin;
 }
 .mh-menu-icon {
   display: inline-flex;
   flex: 0 0 auto;
+  color: var(--mh-text-secondary);
+}
+.mh-menu-item:hover .mh-menu-icon,
+.mh-menu-item.mh-active .mh-menu-icon,
+.mh-menu-item[aria-selected="true"] .mh-menu-icon {
+  color: inherit;
 }
 .mh-menu-text {
   flex: 1 1 auto;
   white-space: nowrap;
 }
-.mh-menu-item[aria-selected="true"] > .mh-menu-text {
-  color: var(--mh-text-strong);
-  font-weight: var(--mh-weight-emphasis);
+/* The pick of a pick-one menu, inverted: it reads at a glance, hovered or not. */
+.mh-menu-list:not([aria-multiselectable="true"]) .mh-menu-item[aria-selected="true"] {
+  background: var(--mh-text-strong);
+  color: var(--mh-bg);
 }
 .mh-menu-note {
+  margin-left: auto;
+  padding-left: 16px;
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-caption);
   white-space: nowrap;
 }
-.mh-menu-tick {
+.mh-menu-item[aria-selected="true"] .mh-menu-note {
+  color: inherit;
+  opacity: 0.75;
+}
+
+/* A pick-many row's checkbox: an empty square, filled blue with a tick once picked. */
+.mh-menu-check {
   display: inline-grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 14px;
-  color: var(--mh-brand);
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--mh-text-tertiary);
+  border-radius: 3px;
+  color: #fff;
+  transition:
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    border-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-menu-item[aria-selected="true"] .mh-menu-check {
+  border-color: var(--mh-dock-accent);
+  background: var(--mh-dock-accent);
 }
 
 /* A canvas tone's swatch: its chrome over its container over its workspace,

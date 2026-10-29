@@ -1,31 +1,17 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { impliedVol, yearsToExpiry } from "../core/black76";
-import { fmt2, nearestExpiry } from "../core/format";
+import { fmt2 } from "../core/format";
 import { ATM_COLOUR, MAX_STRADDLES, clearPicks, countFor, picksFor, togglePick, useCompare } from "../desk/compare";
 import type { Hub } from "../hub/client";
-import type { Underlying } from "../hub/types";
-import { freshPick, PICK_EVENT, readPick, type Pick } from "../straddle/StraddlePage";
-import { Dropdown } from "../ui/Dropdown";
+import type { Pick } from "../straddle/StraddlePage";
 import { CheckIcon, PlusIcon, Spinner } from "../ui/icons";
-import { useUniverse } from "../core/universe";
+import { PickStrip, QuickPicks, shortDate, useFollowedPick } from "./PickStrip";
 import { useQuote } from "./quotes";
 import { useChain, type ChainRow } from "./useChain";
 import "./chain.css";
 
-const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
 const NARROW = 460;
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const shortDate = (ymd: string) => {
-  const [, m, d] = ymd.split("-").map(Number);
-  return `${d} ${MONTHS[(m ?? 1) - 1]}`;
-};
-const daysTo = (ymd: string) => {
-  const n = Math.round((new Date(`${ymd}T12:00:00+05:30`).getTime() - Date.now()) / 86_400_000);
-  return n <= 0 ? "0D" : `${n}D`;
-};
-const iv = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /**
  * One option chain: the strikes around the money with each leg's price, the straddle at that
@@ -37,28 +23,11 @@ export function ChainPanel({
   initialPick,
   onPick,
 }: Readonly<{ hub: Hub; initialPick?: Pick | null; onPick?: (pick: Pick | null) => void }>) {
-  const [pick, setPick] = useState<Pick | null>(() => (initialPick ? freshPick(initialPick) : readPick()));
-  // Until the chain's own search is used, it follows whatever the charts last picked.
-  const own = useRef(Boolean(initialPick));
-  useEffect(() => {
-    const follow = () => {
-      if (!own.current) setPick(readPick());
-    };
-    window.addEventListener(PICK_EVENT, follow);
-    return () => window.removeEventListener(PICK_EVENT, follow);
-  }, []);
+  const [pick, setPick] = useFollowedPick(initialPick);
+  const [connected, setConnected] = useState(hub.state === "open");
   const [narrow, setNarrow] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const universe = useUniverse(hub);
-  const underlyingOf = useMemo(() => new Map(universe.map((u) => [u.id, u] as const)), [universe]);
-  // The underlying in view is always on the list, so the picker names it rather than "Pick an
-  // underlying": before the hub's universe answers, and from a hub that has no `universe` op.
-  const underlyingOptions = useMemo(() => {
-    const option = (u: Underlying) => ({ value: u.id, label: u.name, note: `${daysTo(nearestExpiry(u.expiries))} · ${u.id.split(":")[0]!.toUpperCase()}` });
-    const list = universe.map(option);
-    return pick && !underlyingOf.has(pick.underlying.id) ? [option(pick.underlying), ...list] : list;
-  }, [universe, underlyingOf, pick]);
 
   useEffect(() => {
     onPick?.(pick);
@@ -72,15 +41,6 @@ export function ChainPanel({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  const choose = (u: Underlying) => {
-    own.current = true;
-    setPick({ underlying: u, expiry: nearestExpiry(u.expiries), day: "live" });
-  };
-  const quick = (name: string) => {
-    const u = universe.find((x) => x.name === name);
-    if (u) choose(u);
-  };
 
   const id = pick?.underlying.id ?? "";
   const expiry = pick?.expiry ?? "";
@@ -125,56 +85,13 @@ export function ChainPanel({
 
   return (
     <div className="mh-chain" ref={box} data-narrow={narrow || undefined}>
-      <div className="mh-chain-strip">
-        <Dropdown
-          label="Underlying"
-          caption={false}
-          value={id}
-          onChange={(pickedId) => {
-            const u = underlyingOf.get(pickedId);
-            if (u) choose(u);
-          }}
-          renderValue={(o) =>
-            o ? (
-              <>
-                {o.label} <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
-              </>
-            ) : (
-              "Pick an underlying"
-            )
-          }
-          options={underlyingOptions}
-        />
-        {pick ? (
-          <Dropdown
-            label="Expiry"
-            value={expiry}
-            onChange={(e) => {
-              own.current = true;
-              setPick({ ...pick, expiry: e });
-            }}
-            options={pick.underlying.expiries.map((e) => ({ value: e, label: shortDate(e), note: daysTo(e) }))}
-          />
-        ) : null}
-        <span className="mh-spacer" />
-        {chain.spot !== null ? (
-          <span className="mh-chain-spot">
-            {pick?.underlying.name} <b>{fmt2(chain.spot)}</b>
-          </span>
-        ) : null}
-      </div>
+      <PickStrip hub={hub} pick={pick} onPick={setPick} spot={chain.spot} />
 
       {!pick ? (
         <div className="mh-empty">
           <div className="mh-empty-title">Pick an underlying</div>
           <div className="mh-empty-text">Its option chain, with the straddle at every strike.</div>
-          <div className="mh-quick">
-            {QUICK.map((name) => (
-              <button key={name} type="button" className="mh-btn" disabled={universe.length === 0} onClick={() => quick(name)}>
-                {name}
-              </button>
-            ))}
-          </div>
+          <QuickPicks hub={hub} onPick={setPick} disabled={!connected} />
         </div>
       ) : chain.error ? (
         <div className="mh-empty">

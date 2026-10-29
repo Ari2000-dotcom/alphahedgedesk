@@ -1,0 +1,112 @@
+/*
+ * The strip an option panel opens with (option/PickStrip.tsx): the underlying search box, the
+ * expiry beside it and the spot at its right end. Shared by the chain and the delta x OI panel,
+ * on the page's tokens.
+ */
+
+.mh-pick-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: var(--mh-strip-h);
+  padding: 0 8px;
+  border-bottom: 1px solid var(--mh-line);
+}
+.mh-pick-find {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 230px;
+  cursor: text;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: var(--mh-radius);
+  background: var(--mh-bg);
+  color: var(--mh-text-tertiary);
+}
+/* No gold ring here: the box lifts its edge a step when it has the keyboard, quietly. */
+.mh-pick-find:focus-within {
+  border-color: var(--mh-text-tertiary);
+}
+.mh-pick-find :focus-visible {
+  outline: none;
+}
+/* The picked underlying: its name and the exchange as a small outlined badge, over the empty field. */
+.mh-pick-subject {
+  position: absolute;
+  left: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mh-text-strong);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.mh-pick-subject .mh-chip {
+  height: 17px;
+  padding: 0 5px;
+  border: 1px solid var(--mh-line-strong);
+  background: transparent;
+  color: var(--mh-text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.mh-pick-input:focus ~ .mh-pick-subject {
+  display: none;
+}
+.mh-pick-input::placeholder {
+  color: var(--mh-text-tertiary);
+}
+.mh-pick-find[data-has-pick] .mh-pick-input::placeholder {
+  color: var(--mh-text-strong);
+}
+.mh-pick-clear {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+}
+.mh-pick-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--mh-text-strong);
+}
+.mh-pick-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  max-height: 320px;
+  overflow: auto;
+}
+.mh-pick-spot {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  white-space: nowrap;
+}
+.mh-pick-spot b {
+  color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-regular);
+}
+
+/* The search box's own message, in place of a result list: "Searching…", no match, an error. */
+.mh-pick-note {
+  padding: 10px 12px;
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-caption);
+}

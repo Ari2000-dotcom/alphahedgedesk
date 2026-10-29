@@ -4,8 +4,8 @@ import { CheckIcon, ChevronDownIcon } from "./icons";
 import type { DropdownOption } from "./Dropdown";
 
 /**
- * `Dropdown`'s pick-many sibling: the same flat strip trigger and floating list, a tick beside
- * every picked item instead of one. A click toggles membership and leaves the list open, so
+ * `Dropdown`'s pick-many sibling: the same flat strip trigger and floating list, a checkbox on
+ * every row, ticked on the picked ones. A click toggles membership and leaves the list open, so
  * several can be picked in one visit; Escape, Tab or a click outside closes it. ↑/↓, Home/End
  * move; Enter or Space toggles the active item.
  */
@@ -107,6 +107,7 @@ export function MultiDropdown<T extends string>({
                     {o.group}
                   </li>
                 ) : null}
+                {o.separator && i > 0 ? <li role="separator" className="mh-menu-rule" /> : null}
                 <li
                   id={`${id}-${i}`}
                   role="option"
@@ -115,12 +116,12 @@ export function MultiDropdown<T extends string>({
                   onPointerEnter={() => setActive(i)}
                   onClick={() => toggle(i)}
                 >
+                  <span className="mh-menu-check" aria-hidden>
+                    {value.includes(o.value) ? <CheckIcon size={12} /> : null}
+                  </span>
                   {o.icon ? <span className="mh-menu-icon">{o.icon}</span> : null}
                   <span className="mh-menu-text">{o.label}</span>
                   {o.note ? <span className="mh-menu-note">{o.note}</span> : null}
-                  <span className="mh-menu-tick" aria-hidden>
-                    {value.includes(o.value) ? <CheckIcon size={14} /> : null}
-                  </span>
                 </li>
               </Fragment>
             ))}

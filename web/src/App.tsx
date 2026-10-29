@@ -4,6 +4,7 @@ import type { DockviewApi } from "dockview";
 import { applyCanvas, CANVAS_TONES, loadCanvas, type CanvasId } from "./core/canvas";
 import { Hub, hubUrl, type HubStatus } from "./hub/client";
 import { Ticker } from "./shell/Ticker";
+import { UpdateToast } from "./shell/UpdateToast";
 import { addPanelOf, applyPreset, currentView, PANEL_KINDS, PRESETS, switchView, VIEWS, Workspace, type Preset, type View } from "./shell/Workspace";
 import { useFullscreen } from "./core/fullscreen";
 import { Dropdown } from "./ui/Dropdown";
@@ -161,6 +162,7 @@ export function App() {
           />
         ) : null}
       </main>
+      <UpdateToast />
     </div>
   );
 }

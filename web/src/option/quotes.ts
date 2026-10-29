@@ -4,13 +4,21 @@ import { useSyncExternalStore } from "react";
  * Live option prices, one listener set per contract: a tick redraws the one cell that shows it,
  * not the whole table (AlphaHedge's chain works the same way). Prices live here, outside React,
  * and each cell reads only its own contract.
+ *
+ * Open interest rides along in a map of its own, read on demand rather than subscribed to: the
+ * feed moves it every few seconds at most, and the one panel that wants it (greeks/DeltaOiPanel)
+ * reads every leg at once on its own clock instead of a cell at a time.
  */
 
 const prices = new Map<string, number>();
+const ois = new Map<string, number>();
 const byId = new Map<string, Set<() => void>>();
 const everyone = new Set<() => void>();
 
 export const priceOf = (id: string): number | undefined => prices.get(id);
+
+/** A contract's open interest, as the feed last sent it. */
+export const oiOf = (id: string): number | undefined => ois.get(id);
 
 export function setPrice(id: string, price: number): void {
   if (prices.get(id) === price) return;
@@ -19,8 +27,14 @@ export function setPrice(id: string, price: number): void {
   everyone.forEach((fn) => fn());
 }
 
-/** Forgets a contract's price (its row has left the live set): it shows "—" until the next one. */
+/** Open interest for a contract; silent (no listeners), so a slow-moving number costs no renders. */
+export function setOi(id: string, oi: number): void {
+  ois.set(id, oi);
+}
+
+/** Forgets a contract's price and OI (its row has left the live set): it shows "—" until the next one. */
 export function clearPrice(id: string): void {
+  ois.delete(id);
   if (!prices.delete(id)) return;
   byId.get(id)?.forEach((fn) => fn());
   everyone.forEach((fn) => fn());

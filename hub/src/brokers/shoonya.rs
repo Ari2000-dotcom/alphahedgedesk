@@ -34,6 +34,14 @@ const RECONNECT_FIRST: Duration = Duration::from_millis(500);
 const RECONNECT_CAP: Duration = Duration::from_secs(15);
 /// A session that lasted this long counts as healthy: the next drop retries fast again.
 const HEALTHY_SESSION: Duration = Duration::from_secs(60);
+/// How long the feed must actually be gone before it is called down.
+///
+/// Shoonya's gateway resets a connection now and then without closing it properly; the hub is
+/// back and resubscribed inside a second, and nobody watching a chart sees anything. Reporting
+/// that as "down" taught people to ignore the status light, which is worse than useless — so a
+/// reset inside this window stays "connected" and is noted once, quietly. Past it, it is a real
+/// outage and says so.
+const FEED_DOWN_GRACE: Duration = Duration::from_secs(5);
 /// Fields the login script needs; passed to it as environment variables.
 const LOGIN_KEYS: [&str; 5] = ["SHOONYA_UID", "SHOONYA_PASSWORD", "SHOONYA_TOTP_SECRET", "SHOONYA_CLIENT_ID", "SHOONYA_API_SECRET"];
 /// Chrome start + page + up to two TOTP attempts fits well inside this.
@@ -41,6 +49,42 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// True while the headless login runs, so status shows "logging in" rather than "down".
 pub static LOGGING_IN: AtomicBool = AtomicBool::new(false);
+
+/// Ask for the depth feed rather than touchline. Both carry the price, the best bid/ask and (for
+/// options and futures) open interest; depth adds the five-deep ladder, so it costs more bandwidth
+/// per tick. Touchline is the default and is enough. Kept as a switch because an account whose
+/// touchline updates arrive without `oi` can be moved to depth from config.toml alone, without a
+/// new build: see `depth_feed` under `[brokers.shoonya]`.
+static DEPTH_FEED: AtomicBool = AtomicBool::new(false);
+
+/// Set once at startup, before `run_feed`.
+pub fn use_depth_feed(on: bool) {
+    DEPTH_FEED.store(on, Ordering::Relaxed);
+}
+
+/// Shoonya's codes for the feed in use: what to send to subscribe and unsubscribe, and the two
+/// message kinds it answers with (the acknowledgement carrying every field, then updates carrying
+/// only what changed).
+struct Feed {
+    sub: &'static str,
+    unsub: &'static str,
+    ack: &'static str,
+    update: &'static str,
+    name: &'static str,
+}
+
+fn feed() -> Feed {
+    if DEPTH_FEED.load(Ordering::Relaxed) {
+        Feed { sub: "d", unsub: "ud", ack: "dk", update: "df", name: "depth" }
+    } else {
+        Feed { sub: "t", unsub: "u", ack: "tk", update: "tf", name: "touchline" }
+    }
+}
+
+/// Updates on options or futures carrying no open interest before this is said out loud once.
+/// A chain being watched passes it in a minute or two; a quiet instrument takes longer, which is
+/// the point — the warning should mean "this feed does not send it", not "nothing has traded yet".
+const OI_SILENT_TICKS: u64 = 2000;
 
 /// How to run the headless login: program + args, run from `dir`.
 #[derive(Clone)]
@@ -152,6 +196,10 @@ pub async fn run_feed(hub: Arc<LiveHub>, mut rx: mpsc::UnboundedReceiver<FeedCmd
     let mut drop_backoff = RECONNECT_FIRST / 2;
     // Token the broker last refused, so it is replaced by a fresh login instead of retried.
     let mut stale: Option<String> = None;
+    // When the feed was last actually lost, and whether that has been called down yet: a reset
+    // the hub recovers from inside FEED_DOWN_GRACE never reaches the status light.
+    let mut lost_at: Option<std::time::Instant> = None;
+    let mut called_down = false;
     if login.is_none() && can_auto_login(&creds) {
         tracing::warn!("shoonya login fields are saved but config.toml has no login_cmd; auto-login is off");
     }
@@ -197,7 +245,8 @@ pub async fn run_feed(hub: Arc<LiveHub>, mut rx: mpsc::UnboundedReceiver<FeedCmd
         ver.borrow_and_update();
 
         let started = std::time::Instant::now();
-        let wait = match session(&hub, &mut rx, &mut ver, &creds, &uid, &actid, &token, &mut subs).await {
+        let mut connected = false;
+        let wait = match session(&hub, &mut rx, &mut ver, &creds, &uid, &actid, &token, &mut subs, &mut connected).await {
             End::Closed => return,
             End::CredsChanged => {
                 tracing::info!("shoonya credentials changed; reconnecting now");
@@ -229,15 +278,34 @@ pub async fn run_feed(hub: Arc<LiveHub>, mut rx: mpsc::UnboundedReceiver<FeedCmd
                 } else {
                     tracing::warn!(retry_in = ?w, "shoonya refused the token: expired or invalid — save a new one, or the login fields for auto-login");
                 }
+                // A refused token is a real stop, not a blip: say so at once.
+                lost_at = None;
+                called_down = false;
+                hub.set_feed_status("shoonya", false);
                 Some(w)
             }
             End::Dropped(e) => {
                 drop_backoff = if started.elapsed() >= HEALTHY_SESSION { RECONNECT_FIRST } else { (drop_backoff * 2).min(RECONNECT_CAP) };
-                tracing::warn!(error = %e, retry_in = ?drop_backoff, "shoonya feed dropped; reconnecting");
+                // A session that was connected and then dropped begins a new outage; one that
+                // never got there is the same outage still going.
+                if connected {
+                    lost_at = Some(std::time::Instant::now());
+                    called_down = false;
+                }
+                let gone = lost_at.get_or_insert_with(std::time::Instant::now).elapsed();
+                if gone >= FEED_DOWN_GRACE {
+                    if !called_down {
+                        called_down = true;
+                        hub.set_feed_status("shoonya", false);
+                        tracing::warn!(error = %e, gone = ?gone, retry_in = ?drop_backoff, "shoonya feed is down; still reconnecting");
+                    }
+                } else {
+                    // Normal for this broker, and over before anyone could see it: said once, calmly.
+                    tracing::info!(error = %e, retry_in = ?drop_backoff, "shoonya reset the connection; reconnecting");
+                }
                 Some(drop_backoff)
             }
         };
-        hub.set_feed_status("shoonya", false);
         if !idle(&mut rx, &mut subs, &mut ver, &creds, wait).await {
             return;
         }
@@ -333,6 +401,7 @@ async fn browser_login(l: &LoginCmd, creds: &CredStore) -> anyhow::Result<String
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 async fn session(
     hub: &Arc<LiveHub>,
     rx: &mut mpsc::UnboundedReceiver<FeedCmd>,
@@ -342,8 +411,11 @@ async fn session(
     actid: &str,
     token: &str,
     subs: &mut HashSet<InstrumentId>,
+    // Set once this session is connected: a drop after that starts a new outage, a drop before it
+    // continues the one already running.
+    connected: &mut bool,
 ) -> End {
-    match session_inner(hub, rx, ver, creds, uid, actid, token, subs).await {
+    match session_inner(hub, rx, ver, creds, uid, actid, token, subs, connected).await {
         Ok(end) => end,
         Err(e) => End::Dropped(e),
     }
@@ -359,6 +431,7 @@ async fn session_inner(
     actid: &str,
     token: &str,
     subs: &mut HashSet<InstrumentId>,
+    connected: &mut bool,
 ) -> anyhow::Result<End> {
     let before = creds.snapshot(&OWN_KEYS);
     let (ws, _) = tokio_tungstenite::connect_async(WS_URL).await?;
@@ -378,15 +451,23 @@ async fn session_inner(
         return Ok(End::Rejected);
     }
     hub.set_feed_status("shoonya", true);
+    *connected = true;
     tracing::info!(resubscribing = subs.len(), "shoonya feed connected");
 
+    let f = feed();
     if !subs.is_empty() {
         let k: Vec<String> = subs.iter().filter_map(key).collect();
-        tx.send(Message::Text(serde_json::json!({"t": "t", "k": k.join("#")}).to_string().into())).await?;
+        tx.send(Message::Text(serde_json::json!({"t": f.sub, "k": k.join("#")}).to_string().into())).await?;
     }
 
-    // Last known (ltp, volume, bid, ask, oi, prev_oi) per instrument: `tf` updates carry only what changed.
-    let mut last: HashMap<String, (f64, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)> = HashMap::new();
+    // Whether open interest is actually arriving, said once either way: the web's delta x OI panel
+    // is blank without it, and silence here is otherwise indistinguishable from a quiet market.
+    let mut oi_seen = false;
+    let mut oi_silent: u64 = 0;
+    let mut oi_warned = false;
+    // Last known (ltp, volume, bid, ask, oi, prev_oi, atp) per instrument: updates carry only what changed.
+    #[allow(clippy::type_complexity)]
+    let mut last: HashMap<String, (f64, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)> = HashMap::new();
     // Shoonya's own SDK heartbeats every 3 s with a ping carrying {"t":"h"}; with
     // a 20 s empty ping their gateway reset the connection every few minutes.
     let mut ping = tokio::time::interval(HEARTBEAT_EVERY);
@@ -401,9 +482,9 @@ async fn session_inner(
             _ = &mut pre_market => return Ok(End::PreMarket),
             cmd = rx.recv() => {
                 let Some(cmd) = cmd else { return Ok(End::Closed) };
-                let (t, id) = match cmd { FeedCmd::Sub(id) => ("t", id), FeedCmd::Unsub(id) => ("u", id) };
+                let (t, id) = match cmd { FeedCmd::Sub(id) => (f.sub, id), FeedCmd::Unsub(id) => (f.unsub, id) };
                 let Some(k) = key(&id) else { continue };
-                if t == "t" { subs.insert(id); } else { subs.remove(&id); }
+                if t == f.sub { subs.insert(id); } else { subs.remove(&id); }
                 tx.send(Message::Text(serde_json::json!({"t": t, "k": k}).to_string().into())).await?;
             }
             _ = ping.tick() => { tx.send(Message::Ping(HEARTBEAT.as_bytes().to_vec().into())).await?; }
@@ -412,13 +493,13 @@ async fn session_inner(
                 let Message::Text(t) = msg else { continue };
                 let v: serde_json::Value = match serde_json::from_str(t.as_str()) { Ok(v) => v, Err(_) => continue };
                 let kind = v["t"].as_str().unwrap_or("");
-                if kind != "tk" && kind != "tf" { continue; }
+                if kind != f.ack && kind != f.update { continue; }
                 let (Some(e), Some(tk)) = (v["e"].as_str(), v["tk"].as_str()) else { continue };
                 let num = |f: &str| v[f].as_str().and_then(|s| s.parse::<f64>().ok());
                 // `tk` answers a subscribe with the last known state (yesterday's, before
                 // the open); only a `tf` that moves price, volume or the quote is live.
-                let replay = kind == "tk" || ["lp", "v", "bp1", "sp1"].iter().all(|f| num(f).is_none());
-                let entry = last.entry(format!("{e}|{tk}")).or_insert((0.0, None, None, None, None, None));
+                let replay = kind == f.ack || ["lp", "v", "bp1", "sp1", "oi"].iter().all(|name| num(name).is_none());
+                let entry = last.entry(format!("{e}|{tk}")).or_insert((0.0, None, None, None, None, None, None));
                 if let Some(lp) = num("lp") { entry.0 = lp; }
                 if let Some(vol) = num("v") { entry.1 = Some(vol); }
                 // Best bid / ask; 0 means no order on that side.
@@ -427,8 +508,29 @@ async fn session_inner(
                 // Open interest (a derivative leg only): `oi` now, `poi` yesterday's close.
                 if let Some(oi) = num("oi") { entry.4 = Some(oi); }
                 if let Some(poi) = num("poi") { entry.5 = Some(poi); }
+                // The exchange's average traded price today; 0 before the first trade.
+                if let Some(ap) = num("ap") { entry.6 = (ap > 0.0).then_some(ap); }
                 if entry.0 == 0.0 { continue; }
                 let Some(seg) = segment(e) else { continue };
+                // Only options and futures have open interest; an index or a share never will.
+                if matches!(seg, "NSE_FO" | "BSE_FO" | "MCX_FO") {
+                    if entry.4.is_some() {
+                        if !oi_seen {
+                            oi_seen = true;
+                            tracing::info!(feed = f.name, "shoonya: open interest is arriving");
+                        }
+                    } else if !oi_seen && !oi_warned {
+                        oi_silent += 1;
+                        if oi_silent >= OI_SILENT_TICKS {
+                            oi_warned = true;
+                            tracing::warn!(
+                                feed = f.name,
+                                ticks = oi_silent,
+                                "shoonya: no open interest on any option or future in this feed; the web's delta x OI panel will stay empty.                                  Set depth_feed = true under [brokers.shoonya] in config.toml and restart to ask for the depth feed instead."
+                            );
+                        }
+                    }
+                }
                 hub.publish(&Tick {
                     id: InstrumentId(format!("{seg}:{tk}")),
                     ltp: entry.0,
@@ -437,6 +539,7 @@ async fn session_inner(
                     ask: entry.3,
                     oi: entry.4,
                     prev_oi: entry.5,
+                    atp: entry.6,
                     ts_ms: chrono::Utc::now().timestamp_millis(),
                     src: "shoonya",
                     replay,

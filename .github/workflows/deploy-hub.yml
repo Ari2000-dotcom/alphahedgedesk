@@ -1,0 +1,84 @@
+name: Deploy the hub to the VPS
+
+# Builds MarketHub-server.exe and puts it on the VPS, the way markethub-server.ps1 does it there:
+# the new exe is dropped next to the old one, the "MarketHub" scheduled task is stopped, the exe is
+# copied into hub\bin\ (what actually runs), and the task is started again. The old exe is kept as
+# MarketHub-server.exe.old for a one-step rollback.
+#
+# Run by hand only (Actions > Deploy the hub to the VPS > Run workflow): it restarts the live hub,
+# which drops every connected browser for a few seconds and makes the Shoonya feed log in again.
+# Deploying outside market hours costs nobody a tick. The web deploys separately on every push
+# (deploy-web.yml) because serving new files restarts nothing.
+#
+# Uses the same four repository secrets the web deploy already has: VPS_HOST, VPS_USER, VPS_PATH,
+# VPS_SSH_KEY.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hub
+  cancel-in-progress: false
+
+jobs:
+  hub:
+    # Windows: the VPS runs an .exe, so it is built on the platform it runs on.
+    runs-on: windows-latest
+    env:
+      HOST: ${{ secrets.VPS_HOST }}
+      USER: ${{ secrets.VPS_USER }}
+      DEST: ${{ secrets.VPS_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: hub
+
+      # --no-default-features: no desktop window on a server, as the deploy notes say.
+      - name: Build
+        working-directory: hub
+        run: |
+          cargo test --bin hub --no-default-features
+          cargo build --release --no-default-features
+
+      - name: SSH key
+        shell: bash
+        env:
+          KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload beside the running one
+        shell: bash
+        run: |
+          scp -i "$HOME/.ssh/deploy" -o BatchMode=yes hub/target/release/hub.exe "$USER@$HOST:$DEST/hub/MarketHub-server.exe.new"
+
+      - name: Swap it in and restart
+        shell: bash
+        run: |
+          ssh -i "$HOME/.ssh/deploy" -o BatchMode=yes "$USER@$HOST" "powershell -NoProfile -Command \"\
+            \$ErrorActionPreference='Stop'; \
+            Set-Location '$DEST/hub'; \
+            if (-not (Test-Path 'MarketHub-server.exe.new')) { throw 'upload incomplete' }; \
+            Stop-ScheduledTask -TaskName 'MarketHub'; \
+            Get-Process 'MarketHub-server' -ErrorAction SilentlyContinue | Stop-Process -Force; \
+            Start-Sleep -Seconds 2; \
+            if (Test-Path 'MarketHub-server.exe') { Move-Item 'MarketHub-server.exe' 'MarketHub-server.exe.old' -Force }; \
+            Move-Item 'MarketHub-server.exe.new' 'MarketHub-server.exe' -Force; \
+            New-Item -ItemType Directory -Force 'bin' | Out-Null; \
+            Copy-Item 'MarketHub-server.exe' 'bin\\MarketHub-server.exe' -Force; \
+            Start-ScheduledTask -TaskName 'MarketHub'\""
+
+      # It is up when its own API answers. The port is the one in config.toml (127.0.0.1:8080):
+      # change it here too if that ever changes, or this step fails after a deploy that worked.
+      - name: Check it came back up
+        shell: bash
+        run: |
+          CHECK="for (\$i = 1; \$i -le 30; \$i++) { try { Invoke-RestMethod -Uri 'http://127.0.0.1:8080/health' -TimeoutSec 3 | Out-Null; 'hub is up'; exit 0 } catch { Start-Sleep -Seconds 2 } }; throw 'the hub did not answer in a minute: on the VPS run MarketHub Server.bat, or put MarketHub-server.exe.old back'"
+          ssh -i "$HOME/.ssh/deploy" -o BatchMode=yes "$USER@$HOST" "powershell -NoProfile -Command \"$CHECK\""

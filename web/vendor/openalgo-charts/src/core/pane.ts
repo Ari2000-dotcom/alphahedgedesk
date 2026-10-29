@@ -46,7 +46,7 @@ import { announcingHost, createHitBoxes, inHitBox } from '../render/hit-boxes';
 import {
   drawPriceAxis, drawTimeAxis, drawLastPriceLine, drawLastPriceTag, drawSessionClock,
   drawTimeAxisPill, lastPriceTagHeight, AXIS_LABEL_PRIORITY, drawSeriesValueTag,
-  axisTagY, spreadAxisTags, drawSeriesTitleTag, timeAxisMarks, priceTickCount, tickFits,
+  axisTagY, spreadAxisTags, drawSeriesTitleTag, timeAxisMarks, priceTickCount, tickFits, countdownBlockOffset,
   type PlotLayout, type TickMarkType, type AxisLabelBand,
   type SessionClockOptions, type BarCountdownOptions, type AxisStyle,
 } from '../render/axis';
@@ -1210,7 +1210,12 @@ export class Pane {
       this._inAxisSlot(g, slot, layout, dpr, (scale, columnLayout) => drawLastPriceTag(g, scale, last.close, last.up, columnLayout, dpr,
         axisStyle, { colors, countdown, side: slot.side, atY: at?.y }));
       if (at !== undefined && last.title !== undefined) {
-        placed.titles.push({ y: at.y, height: at.height, color: last.up ? colors.up : colors.down, title: last.title, side: at.side });
+        // MarketHub fork: the name box beside the price tag only, one row on the price, not
+        // beside the countdown box under it.
+        const split = countdown?.visible === true && at.side === 'right';
+        const y = split ? at.y - countdownBlockOffset(dpr) : at.y;
+        const height = split ? lastPriceTagHeight(dpr) : at.height;
+        placed.titles.push({ y, height, color: last.up ? colors.up : colors.down, title: last.title, side: at.side });
       }
     }
     // MarketHub fork: TradingView's name boxes, each against the plot's edge
@@ -1354,7 +1359,10 @@ export class Pane {
       if (last !== null && lastTagOn(scale)) {
         const height = lastPriceTagHeight(dpr, countdown?.visible === true);
         const y = axisTagY(Math.round(scale.priceToY(last.close) * dpr), layout.plotHeight * dpr, height, side);
-        if (y !== null) { readout = true; ys.push(y); heights.push(height); priorities.push(AXIS_LABEL_PRIORITY.lastPrice); }
+        // MarketHub fork: on a right strip the countdown is its own box under the price tag, so
+        // the block it all takes is centred below the price, the tag itself still on the price.
+        const shift = countdown?.visible === true && side === 'right' ? countdownBlockOffset(dpr) : 0;
+        if (y !== null) { readout = true; ys.push(y + shift); heights.push(height); priorities.push(AXIS_LABEL_PRIORITY.lastPrice); }
       }
       const tags: ValueTag[] = [];
       for (const tag of valueTags) {

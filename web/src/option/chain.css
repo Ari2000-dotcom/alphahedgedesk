@@ -9,106 +9,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.mh-chain-strip {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  height: var(--mh-strip-h);
-  padding: 0 8px;
-  border-bottom: 1px solid var(--mh-line);
-}
-.mh-chain-find {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 1 230px;
-  cursor: text;
-  min-width: 0;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--mh-line-strong);
-  border-radius: var(--mh-radius);
-  background: var(--mh-bg);
-  color: var(--mh-text-tertiary);
-}
-/* No gold ring here: the box lifts its edge a step when it has the keyboard, quietly. */
-.mh-chain-find:focus-within {
-  border-color: var(--mh-text-tertiary);
-}
-.mh-chain-find :focus-visible {
-  outline: none;
-}
-/* The picked underlying: its name and the exchange as a small outlined badge, over the empty field. */
-.mh-chain-subject {
-  position: absolute;
-  left: 30px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--mh-text-strong);
-  pointer-events: none;
-  white-space: nowrap;
-}
-.mh-chain-subject .mh-chip {
-  height: 17px;
-  padding: 0 5px;
-  border: 1px solid var(--mh-line-strong);
-  background: transparent;
-  color: var(--mh-text-secondary);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-}
-.mh-chain-input:focus ~ .mh-chain-subject {
-  display: none;
-}
-.mh-chain-input::placeholder {
-  color: var(--mh-text-tertiary);
-}
-.mh-chain-find[data-has-pick] .mh-chain-input::placeholder {
-  color: var(--mh-text-strong);
-}
-.mh-chain-clear {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--mh-text-tertiary);
-  cursor: pointer;
-}
-.mh-chain-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--mh-text-strong);
-}
-.mh-chain-results {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  left: 0;
-  width: 280px;
-  max-height: 320px;
-  overflow: auto;
-}
-.mh-chain-spot {
-  color: var(--mh-text-tertiary);
-  font-size: var(--mh-size-caption);
-  white-space: nowrap;
-}
-.mh-chain-spot b {
-  color: var(--mh-text-strong);
-  font-weight: var(--mh-weight-regular);
-}
-
 /*
  * The table, as AlphaHedge's chain draws it: a sticky header, 34 px rows, the strike in a band of
  * its own, in-the-money cells shaded (calls under spot, puts over it), the money strike underlined
@@ -293,12 +193,6 @@
 .mh-link-btn:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.mh-chain-note {
-  padding: 10px 12px;
-  color: var(--mh-text-secondary);
-  font-size: var(--mh-size-caption);
 }
 
 .mh-chain-limit {

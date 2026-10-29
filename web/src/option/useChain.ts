@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSummaries } from "../desk/summary";
 import type { Hub } from "../hub/client";
 import type { TopicMessage } from "../hub/types";
-import { clearPrice, setPrice, usePricedCount } from "./quotes";
+import { clearPrice, setOi, setPrice, usePricedCount } from "./quotes";
 
 /**
  * One option chain, live, built the way AlphaHedge's is:
@@ -25,9 +25,17 @@ import { clearPrice, setPrice, usePricedCount } from "./quotes";
  * subscribes the same legs (the hub holds one broker subscription per leg for all of them); and
  * the legs go out as one message.
  *
- * The hub's feed carries the last price, bid, ask and volume, not open interest, so the chain
- * shows prices, the straddle at each strike and IV worked out in the browser.
+ * The hub's feed carries the last price, bid, ask, volume and (for options) open interest. The
+ * chain shows prices, the straddle at each strike and IV worked out in the browser; the OI of
+ * every live leg goes to the quote store, where greeks/useDeltaOi sums it against delta.
  */
+
+/** One listed strike and the two legs at it, as the hub names them. */
+export interface Strike {
+  strike: number;
+  call: string;
+  put: string;
+}
 
 export interface ChainRow {
   strike: number;
@@ -55,13 +63,7 @@ export interface ChainState {
   onView: (first: number, last: number) => void;
 }
 
-interface Strike {
-  strike: number;
-  call: string;
-  put: string;
-}
-
-interface Reply {
+export interface Reply {
   reference: string | null;
   strikes: Strike[];
 }
@@ -93,7 +95,8 @@ const GRID = 4;
 const replies = new Map<string, Promise<Reply>>();
 const KEEP_MS = 30 * 60_000;
 
-function strikesOf(hub: Hub, underlying: string, expiry: string): Promise<Reply> {
+/** The strike list for an underlying and expiry: asked for once, shared by every panel that wants it. */
+export function strikesOf(hub: Hub, underlying: string, expiry: string): Promise<Reply> {
   const key = `${underlying}|${expiry}`;
   let pending = replies.get(key);
   if (!pending) {
@@ -140,6 +143,44 @@ function nearViewed(total: number, first: number, last: number, budget: number, 
   return picked.sort((a, b) => a - b);
 }
 
+/**
+ * The spot to trust for an underlying: its own price first, then the expiry's reference
+ * instrument, then what a chart on the same underlying has seen. A price nowhere near the strikes
+ * (a wrong instrument, a stray tick) is ignored, so it cannot put a window at the wrong end of the
+ * list or pick an ATM strike that does not exist. Shared by the chain and the delta x OI panel, so
+ * both agree on where the money is.
+ */
+export function useSpot(hub: Hub, underlying: string, reference: string, strikes: readonly Strike[]): number | null {
+  const [spotOf, setSpotOf] = useState<{ name: string; value: number } | null>(null);
+  const [refSpotOf, setRefSpotOf] = useState<{ name: string; value: number } | null>(null);
+  const summaries = useSummaries();
+  const spotA = spotOf && spotOf.name === underlying ? spotOf.value : null;
+  const spotB = refSpotOf && refSpotOf.name === reference ? refSpotOf.value : null;
+
+  // Asked for by the underlying's own name...
+  useEffect(() => {
+    if (!underlying) return;
+    return hub.subscribe(`quote:${underlying}`, (msg: TopicMessage) => {
+      const p = (msg as { ltp?: number }).ltp;
+      if (msg.t === "q" && typeof p === "number" && p > 0) setSpotOf({ name: underlying, value: p });
+    });
+  }, [hub, underlying]);
+  // ...and by the reference the hub names for this expiry when that is another instrument.
+  useEffect(() => {
+    if (!reference || reference === underlying) return;
+    return hub.subscribe(`quote:${reference}`, (msg: TopicMessage) => {
+      const p = (msg as { ltp?: number }).ltp;
+      if (msg.t === "q" && typeof p === "number" && p > 0) setRefSpotOf({ name: reference, value: p });
+    });
+  }, [hub, reference, underlying]);
+
+  const lo = strikes[0]?.strike ?? 0;
+  const hi = strikes[strikes.length - 1]?.strike ?? 0;
+  const plausible = (v: number | null): v is number => v !== null && v > 0 && (strikes.length === 0 || (v >= lo * 0.6 && v <= hi * 1.6));
+  const chartSpot = summaries.find((x) => x.key.startsWith(`${underlying}|`))?.last.spot ?? null;
+  return [spotA, spotB, chartSpot].find(plausible) ?? null;
+}
+
 export function useChain(hub: Hub, underlying: string, expiry: string): ChainState {
   const chainKey = underlying && expiry ? `${underlying}|${expiry}` : "";
   const chainKeyRef = useRef(chainKey);
@@ -150,26 +191,13 @@ export function useChain(hub: Hub, underlying: string, expiry: string): ChainSta
   // those would stay at the wrong end of the new list.
   const [loaded, setLoaded] = useState<{ key: string; strikes: Strike[]; reference: string } | null>(null);
   const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
-  const [spotOf, setSpotOf] = useState<{ name: string; value: number } | null>(null);
-  const [refSpotOf, setRefSpotOf] = useState<{ name: string; value: number } | null>(null);
   const [connected, setConnected] = useState(hub.state === "open");
-  const summaries = useSummaries();
   const strikes = loaded && loaded.key === chainKey ? loaded.strikes : NONE;
   const reference = loaded && loaded.key === chainKey ? loaded.reference : "";
   const error = failed && failed.key === chainKey ? failed.message : "";
-  const spotA = spotOf && spotOf.name === underlying ? spotOf.value : null;
-  const spotB = refSpotOf && refSpotOf.name === reference ? refSpotOf.value : null;
+  const spot = useSpot(hub, underlying, reference, strikes);
 
   useEffect(() => hub.onStatus((s) => setConnected(s === "open")), [hub]);
-
-  // Which spot to trust: the underlying's own price first, then the expiry's reference, then what a
-  // chart on the same underlying has seen. A price nowhere near the strikes (a wrong instrument, a
-  // stray tick) is ignored, so it cannot put the window at the wrong end of the list.
-  const lo = strikes[0]?.strike ?? 0;
-  const hi = strikes[strikes.length - 1]?.strike ?? 0;
-  const plausible = (v: number | null): v is number => v !== null && v > 0 && (strikes.length === 0 || (v >= lo * 0.6 && v <= hi * 1.6));
-  const chartSpot = summaries.find((x) => x.key.startsWith(`${underlying}|`))?.last.spot ?? null;
-  const spot = [spotA, spotB, chartSpot].find(plausible) ?? null;
 
   // The strikes: kept per pair, shared between panels.
   useEffect(() => {
@@ -186,23 +214,6 @@ export function useChain(hub: Hub, underlying: string, expiry: string): ChainSta
       cancelled = true;
     };
   }, [hub, underlying, expiry, chainKey, connected]);
-
-  // Spot: asked for now, in step with the strikes, by the underlying's own name...
-  useEffect(() => {
-    if (!underlying) return;
-    return hub.subscribe(`quote:${underlying}`, (msg: TopicMessage) => {
-      const p = (msg as { ltp?: number }).ltp;
-      if (msg.t === "q" && typeof p === "number" && p > 0) setSpotOf({ name: underlying, value: p });
-    });
-  }, [hub, underlying]);
-  // ...and by the reference the hub names for this expiry when that is another instrument.
-  useEffect(() => {
-    if (!reference || reference === underlying) return;
-    return hub.subscribe(`quote:${reference}`, (msg: TopicMessage) => {
-      const p = (msg as { ltp?: number }).ltp;
-      if (msg.t === "q" && typeof p === "number" && p > 0) setRefSpotOf({ name: reference, value: p });
-    });
-  }, [hub, reference, underlying]);
 
   // The window's centre: pinned once known. Before the spot arrives it waits (SPOT_WAIT_MS), then
   // takes the middle strike, and moves once to the price when it lands.
@@ -257,6 +268,8 @@ export function useChain(hub: Hub, underlying: string, expiry: string): ChainSta
     const stops = ids.map((id) =>
       hub.subscribe(`quote:${id}`, (msg: TopicMessage) => {
         const p = (msg as { ltp?: number }).ltp;
+        const oi = (msg as { oi?: number }).oi;
+        if (msg.t === "q" && typeof oi === "number" && oi >= 0) setOi(id, oi);
         if (msg.t === "q" && typeof p === "number" && p > 0) setPrice(id, p);
         else if (msg.t === "err" && /topic limit/i.test(String((msg as { error?: unknown }).error ?? ""))) {
           // The hub will not hold this many: keep fewer live at once, and remember it for next time.

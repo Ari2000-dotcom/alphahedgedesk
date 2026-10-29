@@ -115,6 +115,9 @@ struct QuoteMsg<'a> {
     oi: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     poi: Option<f64>,
+    /// The exchange's average traded price today, for the chart's ATP line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    atp: Option<f64>,
     /// Only sent when true: the broker's last known state, not a live update.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     replay: bool,
@@ -249,6 +252,7 @@ impl LiveHub {
                 ask: tick.ask,
                 oi: tick.oi,
                 poi: tick.prev_oi,
+                atp: tick.atp,
                 replay: tick.replay,
                 ts: tick.ts_ms,
                 src: tick.src,
@@ -282,5 +286,75 @@ impl LiveHub {
             "conflated": self.stats.conflated.load(Ordering::Relaxed),
             "feeds": self.feeds.keys().map(|f| (f.to_string(), self.feed_up.read().get(f).copied().unwrap_or(*f == "sim"))).collect::<HashMap<_, _>>(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tick(oi: Option<f64>) -> Tick {
+        Tick {
+            id: InstrumentId("SIM:1".into()),
+            ltp: 101.5,
+            volume: Some(4200.0),
+            bid: Some(101.4),
+            ask: Some(101.6),
+            oi,
+            prev_oi: None,
+            atp: None,
+            ts_ms: 1_700_000_000_000,
+            src: "sim",
+            replay: false,
+        }
+    }
+
+    /// What a subscriber is sent: the web's delta x OI panel reads `oi` off this, and a feed that
+    /// does not send open interest must leave the field out rather than publish a zero.
+    #[test]
+    fn quote_carries_open_interest() {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let hub = LiveHub::new(HashMap::from([("sim", tx)]), None);
+        let mailbox = Mailbox::new();
+        hub.subscribe("quote:SIM:1", &mailbox).expect("subscribed");
+
+        hub.publish(&tick(Some(123_456.0)));
+        let mut out = HashMap::new();
+        mailbox.drain_into(&mut out);
+        let sent = out.values().next().expect("one update").to_string();
+        let v: serde_json::Value = serde_json::from_str(&sent).expect("json");
+        assert_eq!(v["t"], "q");
+        assert_eq!(v["oi"], 123_456.0);
+        assert_eq!(v["ltp"], 101.5);
+
+        hub.publish(&tick(None));
+        out.clear();
+        mailbox.drain_into(&mut out);
+        let sent = out.values().next().expect("one update").to_string();
+        let v: serde_json::Value = serde_json::from_str(&sent).expect("json");
+        assert!(v.get("oi").is_none(), "no open interest means no field: {sent}");
+    }
+
+    /// The chart's ATP line reads `atp`; an index (no average traded price) must leave it out.
+    #[test]
+    fn quote_carries_average_traded_price() {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let hub = LiveHub::new(HashMap::from([("sim", tx)]), None);
+        let mailbox = Mailbox::new();
+        hub.subscribe("quote:SIM:1", &mailbox).expect("subscribed");
+
+        hub.publish(&Tick { atp: Some(101.27), ..tick(None) });
+        let mut out = HashMap::new();
+        mailbox.drain_into(&mut out);
+        let sent = out.values().next().expect("one update").to_string();
+        let v: serde_json::Value = serde_json::from_str(&sent).expect("json");
+        assert_eq!(v["atp"], 101.27);
+
+        hub.publish(&tick(None));
+        out.clear();
+        mailbox.drain_into(&mut out);
+        let sent = out.values().next().expect("one update").to_string();
+        let v: serde_json::Value = serde_json::from_str(&sent).expect("json");
+        assert!(v.get("atp").is_none(), "no average traded price means no field: {sent}");
     }
 }

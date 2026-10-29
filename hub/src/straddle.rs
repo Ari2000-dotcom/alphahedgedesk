@@ -1138,6 +1138,7 @@ mod tests {
                         ask: None,
                         oi: None,
                         prev_oi: None,
+                        atp: None,
                         ts_ms: now_ms(),
                         src: "test",
                         replay: false,

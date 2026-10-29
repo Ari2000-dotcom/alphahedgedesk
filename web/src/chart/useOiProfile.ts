@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import type { Hub } from "../hub/client";
 
-export type OiProfileMode = "oi" | "change";
+export type OiProfileMode = "oi" | "change" | "both";
 
 /** One snapshot of the profile: ascending strikes, each side's OI, and each side's change since
  *  yesterday's close (NaN where unknown) — QuantDesk's `OiProfileData` (chart/oiProfile.ts there). */

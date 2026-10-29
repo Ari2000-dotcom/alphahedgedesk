@@ -98,6 +98,9 @@ struct ShoonyaCfg {
     /// Headless login run when the token is missing or expired; paths relative to config.toml.
     #[serde(default)]
     login_cmd: Vec<String>,
+    /// Ask Shoonya for the depth feed instead of touchline (see config.toml).
+    #[serde(default)]
+    depth_feed: bool,
 }
 #[derive(Deserialize)]
 struct SimCfg {
@@ -232,6 +235,7 @@ async fn start_hub(logs: Arc<Mutex<VecDeque<String>>>) -> anyhow::Result<Hub> {
     // Instrument lists (canonical names → broker tokens), only with a real feed.
     let live = live::LiveHub::new(feed_tx, instruments.clone());
     if let Some(rx) = feed_rx.remove("shoonya") {
+        brokers::shoonya::use_depth_feed(cfg.brokers.shoonya.depth_feed);
         let login = (!cfg.brokers.shoonya.login_cmd.is_empty())
             .then(|| brokers::shoonya::LoginCmd { cmd: cfg.brokers.shoonya.login_cmd.clone(), dir: config_dir.clone() });
         tokio::spawn(brokers::shoonya::run_feed(live.clone(), rx, creds.clone(), login));
