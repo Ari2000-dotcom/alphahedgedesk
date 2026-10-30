@@ -5,11 +5,9 @@
  * the gutters, each container's plate (`--mh-bg`), and the tab strip over it, transparent so
  * the gutter shows past the tabs.
  *
- * Nothing here marks "the selected container" with a frame: AlphaHedge's one rule for its brand
- * gold is "the logo, the current screen's underline and the focus ring — nowhere else", so the
- * same thin gold rule the title bar's own current-screen tab carries is reused for the focused
- * container's active tab, and that is the only cue. The splitter and a drop target get their own
- * blue instead: an interaction colour, not an identity one, so the one gold accent stays rare.
+ * The focused container is the one with the blue frame: its plate and its active tab are edged in
+ * the dock's interaction blue (`--mh-dock-accent`, also the splitter's and a drop target's), the
+ * rest stay frameless, so which one takes the keys is plain at a glance.
  */
 
 .mh-dock {
@@ -61,6 +59,11 @@
   overflow: hidden;
   background: var(--mh-bg);
   contain: layout paint;
+  transition: border-color var(--mh-dur) var(--mh-ease);
+}
+/* The focused container's frame: a blue edge. */
+.mh-dock .dv-groupview.dv-active-group > .dv-content-container {
+  border-color: var(--mh-dock-accent);
 }
 
 /* -- the tab strip -------------------------------------------------------------------------- */
@@ -94,17 +97,13 @@
   border-top-left-radius: var(--mh-dock-radius);
   border-top-right-radius: var(--mh-dock-radius);
 }
-/* The one cue for which container is focused (AlphaHedge's single brand hue, reused from the
-   title bar's own current-screen mark): a thin gold rule under its active tab, nowhere else. */
-.mh-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--mh-brand);
+/* The focused container: its active tab carries the blue frame's top edge, open at the bottom
+   so the frame runs on unbroken into the plate under it (below). */
+.mh-dock .dv-groupview.dv-active-group .dv-tab.dv-active-tab {
+  box-shadow:
+    inset 0 1px 0 var(--mh-dock-accent),
+    inset 1px 0 0 var(--mh-dock-accent),
+    inset -1px 0 0 var(--mh-dock-accent);
 }
 .mh-dock .dv-tab.dv-inactive-tab:hover {
   background: var(--mh-surface-1);
@@ -131,9 +130,6 @@
 .dv-active-tab .mh-tab-icon,
 .dv-tab:hover .mh-tab-icon {
   opacity: 1;
-}
-.dv-groupview.dv-active-group .dv-active-tab .mh-tab-icon {
-  color: var(--mh-brand);
 }
 .mh-tab-title {
   min-width: 0;
