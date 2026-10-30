@@ -12,6 +12,7 @@ import "./chips.css";
 import { picksFor, togglePick, useCompare } from "../desk/compare";
 import { useStrikeLines } from "./useStrikeLines";
 import { dropSummary, publishSummary } from "../desk/summary";
+import { defaultUnderlying } from "../core/defaultUnderlying";
 import { useUniverse } from "../core/universe";
 
 /**
@@ -25,6 +26,8 @@ import { useUniverse } from "../core/universe";
 
 const PAST_DAYS = 3;
 const LAST_PICK = "mh.straddle.pick";
+/** The site has opened on its default underlying (once per page load, by the first straddle chart). */
+let openedThisLoad = false;
 /** Fired on this window when a chart picks something, so a chain beside it can follow. */
 export const PICK_EVENT = "mh-pick";
 const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
@@ -127,6 +130,17 @@ export function StraddlePage({
   const choose = (u: Underlying) => {
     setPick({ underlying: u, expiry: nearestExpiry(u.expiries), day: "live" });
   };
+
+  // Opening the site: the first straddle chart loads the underlying nearest its expiry from the
+  // market that is trading (the indices through 15:30, then GOLD or CRUDEOIL), as `defaultUnderlying`
+  // says, whatever it was left on last time; the charts and tables that follow the pick follow it.
+  useEffect(() => {
+    if (openedThisLoad || universe.length === 0) return;
+    openedThisLoad = true;
+    const u = defaultUnderlying(universe);
+    if (u) choose(u);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [universe]);
 
   /* -- today: live topic ------------------------------------------------------------------ */
   const live = pick?.day === "live";
