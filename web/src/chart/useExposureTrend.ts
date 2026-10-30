@@ -13,8 +13,10 @@ import type { OiProfileData } from "./useOiProfile";
 const LOOK_BACK_MS = 2 * 60_000;
 /** A new reading is kept this often, ms. */
 const KEEP_EVERY_MS = 5_000;
-/** A move smaller than this share of the strike's exposure is noise, not a trend. */
+/** A move shows once it is this share of the strike's exposure, and goes only when it falls under
+ *  the smaller one: a strike hovering at the line does not blink its arrow. */
 const NOISE = 0.0015;
+const NOISE_OFF = 0.0005;
 
 interface Sample {
   at: number;
@@ -33,9 +35,13 @@ const mag = (v: number | null) => (v === null ? Number.NaN : Math.abs(v));
 
 export function useExposureTrend(rows: readonly ExposureRow[], active: boolean, key: string): OiProfileData | null {
   const samples = useRef<{ key: string; list: Sample[] }>({ key: "", list: [] });
+  const showing = useRef(new Map<string, number>());
   return useMemo(() => {
     if (!active || rows.length === 0) return null;
-    if (samples.current.key !== key) samples.current = { key, list: [] };
+    if (samples.current.key !== key) {
+      samples.current = { key, list: [] };
+      showing.current.clear();
+    }
     const list = samples.current.list;
     const now = Date.now();
     const call = rows.map((r) => mag(r.callDeltaOi));
@@ -62,17 +68,23 @@ export function useExposureTrend(rows: readonly ExposureRow[], active: boolean, 
       }
       return old ?? first;
     };
-    const move = (now_: number, then: number | undefined) => {
+    const move = (side: "call" | "put", strike: number, now_: number, then: number | undefined) => {
+      const id = `${side}|${strike}`;
       if (!Number.isFinite(now_) || then === undefined) return 0;
       const d = now_ - then;
-      return Math.abs(d) < NOISE * Math.max(now_, then) ? 0 : d;
+      const size = Math.abs(d) / Math.max(now_, then, 1);
+      const was = showing.current.get(id) ?? 0;
+      // On past the first line; off only under the second, and not while it reverses.
+      const on = size >= NOISE || (was !== 0 && Math.sign(d) === was && size >= NOISE_OFF);
+      showing.current.set(id, on ? Math.sign(d) : 0);
+      return on ? d : 0;
     };
     return {
       strikes: rows.map((r) => r.strike),
       call,
       put,
-      callChange: rows.map((r, i) => move(call[i]!, reference("call", r.strike))),
-      putChange: rows.map((r, i) => move(put[i]!, reference("put", r.strike))),
+      callChange: rows.map((r, i) => move("call", r.strike, call[i]!, reference("call", r.strike))),
+      putChange: rows.map((r, i) => move("put", r.strike, put[i]!, reference("put", r.strike))),
     };
   }, [rows, active, key]);
 }

@@ -42,6 +42,8 @@ export interface OiProfileBarsOptions {
 /** Delta x OI: a strike is heavy when it holds this share of its side's largest, the top few only. */
 const HEAVY_SHARE = 0.55;
 const HEAVY_MAX = 3;
+/** Once heavy, a strike stays so down to this share. */
+const HEAVY_KEEP = 0.45;
 /** A heavy strike's bar, against the others' dimmer one. */
 const HEAVY_ALPHA = 0.85;
 const DELTA_TOTAL_ALPHA = 0.28;
@@ -182,7 +184,14 @@ export class OiProfileBars implements IPrimitive {
     if (topPut) this.label(ctx, xEnd, topPut.y, barH, scale, topPut.level, "put", putColor, dpr);
   }
 
-  /** Delta x OI: the few strikes on each side that hold the most of it, by price. */
+  /** The strikes kept as heavy, per side, so a strike at the line does not flip bright and dim. */
+  private kept: { call: Set<number>; put: Set<number> } = { call: new Set(), put: new Set() };
+
+  /**
+   * Delta x OI: the few strikes on each side that hold the most of it, by price. A strike becomes
+   * heavy at HEAVY_SHARE of its side's largest and in the top few; once heavy it stays so until it
+   * drops under HEAVY_KEEP, or out of the top few more, so a figure wobbling at the line holds still.
+   */
   private heaviest(levels: readonly OiBarLevel[]): { call: Set<number>; put: Set<number> } {
     const pick = (side: Side) => {
       const ranked = levels
@@ -190,7 +199,15 @@ export class OiProfileBars implements IPrimitive {
         .filter((x) => Number.isFinite(x.v) && x.v > 0)
         .sort((a, b) => b.v - a.v);
       const top = ranked[0]?.v ?? 0;
-      return new Set(ranked.slice(0, HEAVY_MAX).filter((x) => x.v >= top * HEAVY_SHARE).map((x) => x.price));
+      const held = this.kept[side];
+      const next = new Set<number>();
+      ranked.forEach((x, rank) => {
+        const keeps = held.has(x.price) && x.v >= top * HEAVY_KEEP && rank < HEAVY_MAX + 2;
+        const enters = x.v >= top * HEAVY_SHARE && rank < HEAVY_MAX;
+        if ((keeps || enters) && next.size < HEAVY_MAX + 1) next.add(x.price);
+      });
+      this.kept[side] = next;
+      return next;
     };
     return { call: pick("call"), put: pick("put") };
   }

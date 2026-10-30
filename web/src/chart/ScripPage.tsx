@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { dayLabel, fmt0, fmt2, nearestExpiry } from "../core/format";
 import { previousClose } from "../core/previousClose";
@@ -31,7 +31,7 @@ import { MultiDropdown } from "../ui/MultiDropdown";
 import { ATR_PERIOD, atrPoints, CANDLE_INTERVALS, useCandles } from "./useCandles";
 import { delta76, yearsToExpiry } from "../core/black76";
 import { useDeltaOi, type Band } from "../greeks/useDeltaOi";
-import { useExposureTrend } from "./useExposureTrend";
+import { useExposureTrend, type ExposureRow } from "./useExposureTrend";
 import { useOiProfile, type OiProfileMode } from "./useOiProfile";
 import { ScripChart, type LiveTick } from "./ScripChart";
 import { CANDLE_PALETTES, paletteColors, useCandlePalette } from "./candlePalette";
@@ -124,18 +124,25 @@ export function ScripPage({
   // panels are open. So the deltas use one vol across the chain (the ATM's): the skew is left out.
   const deltaExpiry = deltaOn ? (pickedExpiries[0] ?? "") : "";
   const doi = useDeltaOi(hub, deltaOn ? id : "", deltaExpiry, 0 as unknown as Band);
+  const heldRows = useRef<{ key: string; rows: ExposureRow[] }>({ key: "", rows: [] });
+  const deltaKey = `${id}|${deltaExpiry}`;
   const deltaRows = useMemo(() => {
-    if (!deltaOn || !oiProfile || doi.forward === null || doi.atmIv === null) return [];
+    if (!deltaOn) return [];
+    // The ATM vol or the forward drops out for a beat now and then (a leg's price not yet in, a vol
+    // that does not solve): the bars hold the last good picture then, rather than vanishing.
+    if (!oiProfile || doi.forward === null || doi.atmIv === null) return heldRows.current.key === deltaKey ? heldRows.current.rows : [];
     const years = Math.round(yearsToExpiry(deltaExpiry, id.startsWith("mcx:")) * 525_600) / 525_600;
     const vol = doi.atmIv / 100;
     const weigh = (oi: number | undefined, strike: number, call: boolean) => (oi !== undefined && Number.isFinite(oi) ? delta76(doi.forward!, strike, years, vol, call) * oi : null);
-    return oiProfile.strikes.map((strike, i) => ({
+    const rows = oiProfile.strikes.map((strike, i) => ({
       strike,
       callDeltaOi: weigh(oiProfile.call[i], strike, true),
       putDeltaOi: weigh(oiProfile.put[i], strike, false),
     }));
-  }, [deltaOn, oiProfile, doi.forward, doi.atmIv, deltaExpiry, id]);
-  const deltaProfile = useExposureTrend(deltaRows, deltaOn, `${id}|${deltaExpiry}`);
+    heldRows.current = { key: deltaKey, rows };
+    return rows;
+  }, [deltaOn, oiProfile, doi.forward, doi.atmIv, deltaExpiry, id, deltaKey]);
+  const deltaProfile = useExposureTrend(deltaRows, deltaOn, deltaKey);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
   const { candles, loading, error, note } = useCandles(id, spec.value, spec.days);
