@@ -1,6 +1,5 @@
 import { useMemo, useRef } from "react";
 
-import type { DeltaOiRow } from "../greeks/useDeltaOi";
 import type { OiProfileData } from "./useOiProfile";
 
 /**
@@ -23,9 +22,16 @@ interface Sample {
   put: Map<number, number>;
 }
 
+/** One strike's delta x OI on each side, the put's negative; null where a leg has no reading. */
+export interface ExposureRow {
+  strike: number;
+  callDeltaOi: number | null;
+  putDeltaOi: number | null;
+}
+
 const mag = (v: number | null) => (v === null ? Number.NaN : Math.abs(v));
 
-export function useExposureTrend(rows: readonly DeltaOiRow[], active: boolean, key: string): OiProfileData | null {
+export function useExposureTrend(rows: readonly ExposureRow[], active: boolean, key: string): OiProfileData | null {
   const samples = useRef<{ key: string; list: Sample[] }>({ key: "", list: [] });
   return useMemo(() => {
     if (!active || rows.length === 0) return null;

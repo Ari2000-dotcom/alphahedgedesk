@@ -29,7 +29,8 @@ import {
 } from "../ui/icons";
 import { MultiDropdown } from "../ui/MultiDropdown";
 import { ATR_PERIOD, atrPoints, CANDLE_INTERVALS, useCandles } from "./useCandles";
-import { DEFAULT_BAND, useDeltaOi } from "../greeks/useDeltaOi";
+import { delta76, yearsToExpiry } from "../core/black76";
+import { useDeltaOi, type Band } from "../greeks/useDeltaOi";
 import { useExposureTrend } from "./useExposureTrend";
 import { useOiProfile, type OiProfileMode } from "./useOiProfile";
 import { ScripChart, type LiveTick } from "./ScripChart";
@@ -112,13 +113,29 @@ export function ScripPage({
   }, [id, allExpiriesKey]);
   const pickedExpiries = expiries.filter((e) => allExpiries.includes(e));
   // Hidden asks the hub for nothing: no expiries, no profile.
-  const { data: oiProfile } = useOiProfile(hub, id, oiView === "off" || oiView === "delta" ? [] : pickedExpiries);
-
-  // Delta × OI: the same bars, each strike's OI weighted by its delta. Only while that view is up,
-  // since it holds a band of live legs open.
   const deltaOn = oiView === "delta";
-  const doi = useDeltaOi(hub, deltaOn ? id : "", deltaOn ? (pickedExpiries[0] ?? "") : "", DEFAULT_BAND);
-  const deltaProfile = useExposureTrend(doi.rows, deltaOn, `${id}|${pickedExpiries[0] ?? ""}`);
+  // Delta × OI is for one expiry (the first picked); the other views sum all of them.
+  const { data: oiProfile } = useOiProfile(hub, id, oiView === "off" ? [] : deltaOn ? pickedExpiries.slice(0, 1) : pickedExpiries);
+
+  // Delta × OI over every strike of the expiry. The OI of the whole chain is one request (the same
+  // profile as the other views); what a strike's delta needs is the forward and the ATM vol, and
+  // those come from the two at-the-money legs alone. Pricing each strike's own legs would mean a
+  // live subscription per leg, which the hub's per-visitor limit cuts to a few strikes when other
+  // panels are open. So the deltas use one vol across the chain (the ATM's): the skew is left out.
+  const deltaExpiry = deltaOn ? (pickedExpiries[0] ?? "") : "";
+  const doi = useDeltaOi(hub, deltaOn ? id : "", deltaExpiry, 0 as unknown as Band);
+  const deltaRows = useMemo(() => {
+    if (!deltaOn || !oiProfile || doi.forward === null || doi.atmIv === null) return [];
+    const years = Math.round(yearsToExpiry(deltaExpiry, id.startsWith("mcx:")) * 525_600) / 525_600;
+    const vol = doi.atmIv / 100;
+    const weigh = (oi: number | undefined, strike: number, call: boolean) => (oi !== undefined && Number.isFinite(oi) ? delta76(doi.forward!, strike, years, vol, call) * oi : null);
+    return oiProfile.strikes.map((strike, i) => ({
+      strike,
+      callDeltaOi: weigh(oiProfile.call[i], strike, true),
+      putDeltaOi: weigh(oiProfile.put[i], strike, false),
+    }));
+  }, [deltaOn, oiProfile, doi.forward, doi.atmIv, deltaExpiry, id]);
+  const deltaProfile = useExposureTrend(deltaRows, deltaOn, `${id}|${deltaExpiry}`);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
   const { candles, loading, error, note } = useCandles(id, spec.value, spec.days);
@@ -276,7 +293,7 @@ export function ScripPage({
                   </button>
                 ))}
                 {deltaOn ? (
-                  <span className="mh-oi-caption">{doi.ready ? `Δ×OI · ±${DEFAULT_BAND} strikes · move vs 2 min` : doi.error || doi.waiting}</span>
+                  <span className="mh-oi-caption">{deltaRows.length > 0 ? "Δ×OI · every strike · move vs 2 min" : doi.error || doi.waiting}</span>
                 ) : null}
               </div>
             </>
