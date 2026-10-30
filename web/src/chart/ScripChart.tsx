@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createChart, type Bar as OaBar, type Chart, type SeriesApi } from "openalgo-charts";
+import { createChart, PaneLegend, type Bar as OaBar, type Chart, type LegendValue, type SeriesApi } from "openalgo-charts";
 
 import { fmt0, fmt2, istDate } from "../core/format";
 import { priceAxisWidth, themeFromPage, token } from "./chartTheme";
@@ -138,6 +138,10 @@ export function ScripChart({
   const priceRef = useRef<SeriesApi | null>(null);
   /** The indicator lines on the chart now, by indicator. */
   const linesRef = useRef(new Map<IndicatorId, SeriesApi>());
+  /** The name label at the top left of each lower pane (ATR 14, RSI 14), with the line's reading. */
+  const legendRef = useRef(new Map<IndicatorId, PaneLegend>());
+  const readings = useRef(new Map<IndicatorId, { byTime: Map<number, number>; last: number | null }>());
+  const hoverAt = useRef<number | null>(null);
   const oiBarsRef = useRef<OiProfileBars | null>(null);
   const shownKey = useRef("");
   /** The candle the next tick lands on: the hub's last one, then whatever ticks have made of it. */
@@ -219,6 +223,8 @@ export function ScripChart({
     chart.addPrimitive(oiBarsRef.current, 0);
     // The OI tooltip: only while the pointer is over a strike's bars on the price pane.
     const unsubscribe = chart.subscribeCrosshairMove((e) => {
+      hoverAt.current = e.time ?? null;
+      showLegends();
       const level = e.point && e.paneIndex === 0 && !e.pressed ? oiBarsRef.current?.levelAt(e.point.x, e.point.y) ?? null : null;
       // The strike, not a copy of its figures: the tooltip reads them fresh as the profile updates.
       setTip(level && e.point ? { x: e.point.x, y: e.point.y, price: level.price } : null);
@@ -231,6 +237,8 @@ export function ScripChart({
       chartRef.current = null;
       priceRef.current = null;
       lines.clear();
+      legendRef.current.clear();
+      readings.current.clear();
       atpRef.current = null;
       oiBarsRef.current = null;
       shownKey.current = "";
@@ -269,13 +277,41 @@ export function ScripChart({
    * read-out move with the forming candle: their last points are worked out again from the candles
    * as they are now, once a frame however many ticks arrive.
    */
+  /** The pane legends' readings: the minute under the crosshair, else the latest. */
+  const showLegends = () => {
+    for (const [id, legend] of legendRef.current) {
+      const def = INDICATORS.find((d) => d.id === id)!;
+      const held = readings.current.get(id);
+      const at = hoverAt.current;
+      const value = at !== null ? held?.byTime.get(at) ?? held?.last ?? null : held?.last ?? null;
+      const values: LegendValue[] = [{ text: value !== null && value !== undefined ? fmt2(value) : "—", color: lineColor(def.color) }];
+      legend.setOptions({ color: lineColor(def.color) });
+      legend.setValues(values);
+    }
+  };
+  /** Takes in points (all of them, or the last few that moved) as the legend's readings. */
+  const takeReadings = (id: IndicatorId, points: readonly { time: number; value?: number }[]) => {
+    if (!legendRef.current.has(id)) return;
+    const held = readings.current.get(id) ?? { byTime: new Map<number, number>(), last: null };
+    for (const p of points) {
+      if (typeof p.value === "number" && Number.isFinite(p.value)) {
+        held.byTime.set(p.time, p.value);
+        held.last = p.value;
+      }
+    }
+    readings.current.set(id, held);
+  };
+
   const refreshLive = () => {
     const held = bars.current;
     if (held.length === 0) return;
     for (const [id, series] of linesRef.current) {
       const def = INDICATORS.find((d) => d.id === id)!;
-      for (const point of def.points(held, colors).slice(-2)) series.update(point);
+      const tail = def.points(held, colors).slice(-2);
+      for (const point of tail) series.update(point);
+      takeReadings(id, tail);
     }
+    showLegends();
     if (onAtr) {
       const last = atrPoints(held, ATR_PERIOD).at(-1);
       onAtr(last && "value" in last ? last.value : null);
@@ -293,8 +329,12 @@ export function ScripChart({
   const fillLines = () => {
     for (const [id, series] of linesRef.current) {
       const def = INDICATORS.find((d) => d.id === id)!;
-      series.setData(def.points(bars.current.length > 0 ? bars.current : candles, colors));
+      const points = def.points(bars.current.length > 0 ? bars.current : candles, colors);
+      series.setData(points);
+      readings.current.delete(id);
+      takeReadings(id, points);
     }
+    showLegends();
   };
 
   /* -- indicators: the picked lines, overlays on the candles and each oscillator in its own pane - */
@@ -305,6 +345,8 @@ export function ScripChart({
     // Rebuilt whole: an oscillator's pane goes with it, and the panes under it move up a slot.
     for (const series of linesRef.current.values()) series.remove();
     linesRef.current.clear();
+    legendRef.current.clear();
+    readings.current.clear();
     for (let i = chart.panes().length - 1; i >= 1; i--) chart.removePane(i, { force: true });
     for (const def of INDICATORS) {
       // A level (ATP) is a price line, drawn by its own effect below.
@@ -324,7 +366,13 @@ export function ScripChart({
           lastValueVisible: true,
         },
       });
-      if (paneIndex > 0) chart.setPaneWeight(paneIndex, 1);
+      if (paneIndex > 0) {
+        chart.setPaneWeight(paneIndex, 1);
+        // The pane says what it is: the indicator's name at its top left, with its reading.
+        const legend = new PaneLegend({ id: def.id, title: def.name, color: lineColor(def.color), row: 0, font: 12 });
+        chart.addPrimitive(legend, paneIndex);
+        legendRef.current.set(def.id, legend);
+      }
       linesRef.current.set(def.id, series);
     }
     chart.setPaneWeight(0, 3);
