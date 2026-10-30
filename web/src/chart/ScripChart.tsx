@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, type Bar as OaBar, type Chart, type SeriesApi } from "openalgo-charts";
 
-import { fmt0, fmt2 } from "../core/format";
+import { fmt0, fmt2, istDate } from "../core/format";
 import { priceAxisWidth, themeFromPage, token } from "./chartTheme";
 import { isLineType, type ScripChartType } from "./chartType";
 import { INDICATORS, sessionAverage, type IndicatorId } from "./indicators";
@@ -52,6 +52,34 @@ function midpoint(bars: readonly OaBar[]): number {
 function withAlpha(hex: string, alpha: number): string {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
   return `${hex}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+}
+
+/** The NSE cash session, seconds (09:15 to 15:30). */
+const SESSION_SECONDS = 22_500;
+/** The least candles a fresh view shows, so a coarse interval keeps some history around its day. */
+const MIN_VISIBLE = 70;
+/** Empty room kept to the right of the session, candles. */
+const ROOM = 4;
+
+/**
+ * Opens a chart on the current day, whole and unsqueezed: an intraday chart shows the latest
+ * session from its first candle across to the close with room for the candles still to come, never
+ * the fortnight loaded behind it fitted into the width. A coarse interval, whose session is only a
+ * few candles, shows enough of the days before it to read as a chart. A daily chart fits what it has.
+ */
+function fitLatestSession(chart: Chart, candles: readonly OaBar[], stepSec: number): void {
+  const n = candles.length;
+  if (n === 0 || stepSec >= 86_400) {
+    chart.fitContent();
+    return;
+  }
+  const day = istDate(candles[n - 1]!.time * 1000);
+  let first = n - 1;
+  while (first > 0 && istDate(candles[first - 1]!.time * 1000) === day) first--;
+  const perDay = Math.max(1, Math.round(SESSION_SECONDS / stepSec));
+  const to = Math.max(n - 1, first + perDay - 1) + ROOM;
+  const from = Math.max(-2, to - Math.max(perDay + ROOM + 2, MIN_VISIBLE));
+  chart.setVisibleLogicalRange({ from, to });
 }
 
 /**
@@ -275,7 +303,7 @@ export function ScripChart({
     fillLines();
     forming.current = candles[candles.length - 1] ?? null;
     if (tick) apply(tick);
-    if (shownKey.current !== viewKey) chart.fitContent();
+    if (shownKey.current !== viewKey) fitLatestSession(chart, candles, stepSec);
     shownKey.current = viewKey;
     // `tick` is applied here only to catch up a reload; its own effect follows it from here.
     // eslint-disable-next-line react-hooks/exhaustive-deps

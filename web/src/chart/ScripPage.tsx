@@ -46,7 +46,7 @@ import { INDICATORS, useIndicators } from "./indicators";
  */
 
 const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
-const DEFAULT_INTERVAL = "1d";
+const DEFAULT_INTERVAL = "5m";
 type OiView = OiProfileMode | "delta" | "off";
 const OI_VIEWS: readonly {
   value: OiView;
