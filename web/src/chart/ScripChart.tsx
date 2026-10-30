@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, type Bar as OaBar, type Chart, type SeriesApi } from "openalgo-charts";
 
 import { fmt0, fmt2 } from "../core/format";
@@ -113,7 +113,7 @@ export function ScripChart({
   /** The ATP level: a one-point line series, so it takes the name box, value tag and dotted level
    *  every other line on the chart has. */
   const atpRef = useRef<SeriesApi | null>(null);
-  const [tip, setTip] = useState<{ x: number; y: number; level: OiBarLevel } | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; price: number } | null>(null);
 
   useChartPixelSnap(frame, host);
 
@@ -185,7 +185,8 @@ export function ScripChart({
     // The OI tooltip: only while the pointer is over a strike's bars on the price pane.
     const unsubscribe = chart.subscribeCrosshairMove((e) => {
       const level = e.point && e.paneIndex === 0 && !e.pressed ? oiBarsRef.current?.levelAt(e.point.x, e.point.y) ?? null : null;
-      setTip(level && e.point ? { x: e.point.x, y: e.point.y, level } : null);
+      // The strike, not a copy of its figures: the tooltip reads them fresh as the profile updates.
+      setTip(level && e.point ? { x: e.point.x, y: e.point.y, price: level.price } : null);
     });
     if (import.meta.env.DEV) (window as unknown as { __mhScripChart?: Chart }).__mhScripChart = chart;
     const lines = linesRef.current;
@@ -370,10 +371,17 @@ export function ScripChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [themeKey, colors.up, colors.down]);
 
+  // The hovered strike's figures as they are now, so a still pointer sees them move.
+  const tipLevel = useMemo<OiBarLevel | null>(() => {
+    if (!tip || !oiProfile) return null;
+    const i = oiProfile.strikes.indexOf(tip.price);
+    return i < 0 ? null : { price: tip.price, call: oiProfile.call[i]!, put: oiProfile.put[i]!, callChange: oiProfile.callChange[i]!, putChange: oiProfile.putChange[i]! };
+  }, [tip, oiProfile]);
+
   return (
     <div className="oa-chart-frame" ref={frame}>
       <div ref={host} className="oa-chart" aria-label="Price chart with indicators" />
-      {tip ? <OiTip {...tip} colors={colors} unit={oiUnit} /> : null}
+      {tipLevel && tip ? <OiTip x={tip.x} y={tip.y} level={tipLevel} colors={colors} unit={oiUnit} mode={oiMode} /> : null}
     </div>
   );
 }
@@ -381,32 +389,83 @@ export function ScripChart({
 const signed = (v: number) => (Number.isFinite(v) ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt0(Math.abs(v))}` : "—");
 const whole = (v: number) => (Number.isFinite(v) ? fmt0(v) : "—");
 
-/** One strike's open interest, beside the pointer: call and put, each with today's change. */
-function OiTip({ x, y, level, colors, unit }: Readonly<{ x: number; y: number; level: OiBarLevel; colors: { up: string; down: string }; unit: "oi" | "delta" }>) {
+/** Indian short scale, as a desk reads it: 1.42 Cr, 44.1 L, 8.2 K. */
+function compact(v: number): string {
+  if (!Number.isFinite(v)) return "—";
+  const a = Math.abs(v);
+  if (a >= 1e7) return `${(a / 1e7).toFixed(2)} Cr`;
+  if (a >= 1e5) return `${(a / 1e5).toFixed(2)} L`;
+  if (a >= 1e3) return `${(a / 1e3).toFixed(1)} K`;
+  return fmt0(a);
+}
+const compactSigned = (v: number) => (Number.isFinite(v) ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${compact(v)}` : "—");
+
+/** An arrow and a move: green ▲ while it is being added, red ▼ while it is shed, nothing when flat. */
+function Move({ v, text }: Readonly<{ v: number; text: string }>) {
+  if (!Number.isFinite(v) || v === 0) return <span className="mh-oi-flat">—</span>;
+  return (
+    <span className={v > 0 ? "mh-up" : "mh-down"}>
+      {v > 0 ? "▲" : "▼"} {text}
+    </span>
+  );
+}
+
+/**
+ * One strike beside the pointer, read live: call and put, each with its move, and under them what
+ * the two make of it. Open interest: the total and the put/call ratio. Delta x OI: the net
+ * exposure (calls less puts), long or short.
+ */
+function OiTip({ x, y, level, colors, unit, mode }: Readonly<{ x: number; y: number; level: OiBarLevel; colors: { up: string; down: string }; unit: "oi" | "delta"; mode: OiProfileMode }>) {
+  const delta = unit === "delta";
+  const fmt = delta ? compact : whole;
+  const fmtMove = delta ? compactSigned : signed;
+  const showMove = mode !== "oi";
+  const net = level.call - level.put;
+  const pcr = level.call > 0 ? level.put / level.call : Number.NaN;
   return (
     // Left of the pointer: the bars hang off the right axis, so there is always room that side.
     <div className="mh-oi-tip" style={{ right: `calc(100% - ${x - 12}px)`, top: y }} role="tooltip">
-      <div className="mh-oi-tip-head">{fmt2(level.price)}</div>
+      <div className="mh-oi-tip-head">
+        {fmt2(level.price)}
+        <span>{delta ? "Delta × OI" : "Open interest"}</span>
+      </div>
       <table>
         <thead>
           <tr>
             <th />
-            <th>{unit === "delta" ? "Δ×OI" : "OI"}</th>
-            <th>{unit === "delta" ? "vs 2 min" : "Chg"}</th>
+            <th>{delta ? "Δ×OI" : "OI"}</th>
+            {showMove ? <th>{delta ? "vs 2 min" : "Today"}</th> : null}
           </tr>
         </thead>
         <tbody>
           <tr>
             <th style={{ color: colors.up }}>Call</th>
-            <td>{whole(level.call)}</td>
-            <td>{signed(level.callChange)}</td>
+            <td>{fmt(level.call)}</td>
+            {showMove ? (
+              <td>
+                <Move v={level.callChange} text={fmtMove(level.callChange)} />
+              </td>
+            ) : null}
           </tr>
           <tr>
             <th style={{ color: colors.down }}>Put</th>
-            <td>{whole(level.put)}</td>
-            <td>{signed(level.putChange)}</td>
+            <td>{fmt(level.put)}</td>
+            {showMove ? (
+              <td>
+                <Move v={level.putChange} text={fmtMove(level.putChange)} />
+              </td>
+            ) : null}
           </tr>
         </tbody>
+        <tfoot>
+          <tr>
+            <th>{delta ? "Net" : "PCR"}</th>
+            <td className={delta && Number.isFinite(net) ? (net > 0 ? "mh-up" : net < 0 ? "mh-down" : "") : ""}>
+              {delta ? (Number.isFinite(net) ? `${net > 0 ? "Long " : net < 0 ? "Short " : ""}${compact(net)}` : "—") : Number.isFinite(pcr) ? pcr.toFixed(2) : "—"}
+            </td>
+            {showMove ? <td /> : null}
+          </tr>
+        </tfoot>
       </table>
     </div>
   );

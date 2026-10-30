@@ -610,8 +610,32 @@ input {
   white-space: nowrap;
 }
 .mh-oi-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
   margin-bottom: 4px;
   font-weight: var(--mh-weight-emphasis);
+}
+.mh-oi-tip-head span {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-micro);
+  font-weight: var(--mh-weight-regular);
+}
+.mh-oi-tip tfoot th,
+.mh-oi-tip tfoot td {
+  padding-top: 4px;
+  border-top: 1px solid var(--mh-line);
+  color: var(--mh-text-secondary);
+}
+.mh-oi-tip .mh-up {
+  color: var(--mh-up);
+}
+.mh-oi-tip .mh-down {
+  color: var(--mh-down);
+}
+.mh-oi-flat {
+  color: var(--mh-text-disabled);
 }
 .mh-oi-tip table {
   border-collapse: collapse;
