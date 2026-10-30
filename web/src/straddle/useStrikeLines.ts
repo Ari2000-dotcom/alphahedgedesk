@@ -50,7 +50,9 @@ export function useStrikeLines(
   picks: readonly { strike: number; colour: string }[],
 ): StrikeLine[] {
   const live = day === "live";
-  const sessionDay = live ? istDate(Date.now()) : day;
+  // Today's session is the day the chart's own bars are on, not the clock's: after midnight the hub
+  // still serves the session that closed, and asking for the new date's candles found none.
+  const sessionDay = live ? istDate(bars[0]?.t ?? Date.now()) : day;
   const legs = useMemo(
     () => picks.flatMap((p) => [`${underlying}:${expiry}:${p.strike}:CE`, `${underlying}:${expiry}:${p.strike}:PE`]),
     [picks, underlying, expiry],

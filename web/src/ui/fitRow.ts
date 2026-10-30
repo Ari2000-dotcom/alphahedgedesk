@@ -8,7 +8,7 @@ import { useLayoutEffect, useState } from "react";
  * Every element in the row marked `data-drop="n"` can give way, the lowest `n` first, all of one rank
  * together (the CE and PE legs). Each pass shows them all, then hides rank by rank until the row
  * stops overflowing. It runs after every render, as new values change the widths, and whenever the
- * row's container changes size.
+ * row's container or one of its pieces changes size.
  *
  * Returns the ref callback to put on the row.
  */
@@ -21,8 +21,11 @@ export function useFitRow(overflows: (row: HTMLElement) => boolean = spills): (r
 
   useLayoutEffect(() => {
     if (!row) return;
-    const observer = new ResizeObserver(() => fit(row, overflows));
+    const observer = new ResizeObserver(() => refit(row, overflows));
     observer.observe(row.parentElement ?? row);
+    // A piece that grows by itself (the title bar's index prices, drawn by components of their own
+    // that update without the row re-rendering) refits the row too.
+    for (const piece of row.querySelectorAll("[data-drop]")) observer.observe(piece);
     return () => observer.disconnect();
   }, [row, overflows]);
 
@@ -47,12 +50,57 @@ export const wraps = (row: HTMLElement): boolean => {
   return false;
 };
 
-function fit(row: HTMLElement, overflows: (row: HTMLElement) => boolean): void {
+const rankOf = (piece: HTMLElement) => Number(piece.dataset.drop);
+
+/** A row's pieces, their ranks lowest first, and a way to hide or show one rank. */
+function piecesOf(row: HTMLElement) {
   const pieces = [...row.querySelectorAll<HTMLElement>("[data-drop]")];
+  const ranks = [...new Set(pieces.map(rankOf))].sort((a, b) => a - b);
+  const setHidden = (rank: number, hidden: boolean) => {
+    for (const piece of pieces) if (rankOf(piece) === rank) piece.hidden = hidden;
+  };
+  return { pieces, ranks, setHidden };
+}
+
+/** From nothing hidden: after a render, when any value may have changed width. */
+function fit(row: HTMLElement, overflows: (row: HTMLElement) => boolean): void {
+  const { pieces, ranks, setHidden } = piecesOf(row);
   for (const piece of pieces) piece.hidden = false;
-  const ranks = [...new Set(pieces.map((p) => Number(p.dataset.drop)))].sort((a, b) => a - b);
+  let over = overflows(row);
   for (const rank of ranks) {
-    if (!overflows(row)) return;
-    for (const piece of pieces) if (Number(piece.dataset.drop) === rank) piece.hidden = true;
+    if (!over) break;
+    setHidden(rank, true);
+    over = overflows(row);
   }
+  // Still over with everything given way (a wrapping row on two lines): styles can lay it out for that.
+  row.toggleAttribute("data-overflowing", over);
+}
+
+/**
+ * From what is hidden now: on a resize, which a splitter drag sends every frame. Showing every
+ * piece only to hide them again cost a layout per rank on each frame; this hides the next rank
+ * while the row is over, or gives back the last one hidden while the room holds it, so a frame
+ * that changes nothing costs one or two measurements. Ranks still go lowest first.
+ */
+function refit(row: HTMLElement, overflows: (row: HTMLElement) => boolean): void {
+  const { pieces, ranks, setHidden } = piecesOf(row);
+  const hidden = ranks.filter((rank) => pieces.some((p) => rankOf(p) === rank && p.hidden));
+  let over = overflows(row);
+  if (over) {
+    for (const rank of ranks) {
+      if (hidden.includes(rank)) continue;
+      setHidden(rank, true);
+      over = overflows(row);
+      if (!over) break;
+    }
+  } else {
+    for (const rank of hidden.reverse()) {
+      setHidden(rank, false);
+      if (overflows(row)) {
+        setHidden(rank, true);
+        break;
+      }
+    }
+  }
+  row.toggleAttribute("data-overflowing", over);
 }

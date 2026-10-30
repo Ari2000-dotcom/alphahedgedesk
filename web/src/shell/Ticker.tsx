@@ -4,6 +4,7 @@ import { fmt2 } from "../core/format";
 import { previousClose } from "../core/previousClose";
 import type { Hub } from "../hub/client";
 import type { TopicMessage } from "../hub/types";
+import { useFitRow } from "../ui/fitRow";
 
 /** The indices in the title bar, as AlphaHedge shows them. */
 const INDICES = [
@@ -12,7 +13,7 @@ const INDICES = [
   { id: "bse:sensex", name: "SENSEX" },
 ];
 
-function IndexPrice({ hub, id, name }: Readonly<{ hub: Hub; id: string; name: string }>) {
+function IndexPrice({ hub, id, name, drop }: Readonly<{ hub: Hub; id: string; name: string; drop: number }>) {
   const [ltp, setLtp] = useState<number | null>(null);
   const [prev, setPrev] = useState<number | null>(null);
 
@@ -38,7 +39,7 @@ function IndexPrice({ hub, id, name }: Readonly<{ hub: Hub; id: string; name: st
   const pct = ltp !== null && prev ? ((ltp - prev) / prev) * 100 : null;
   const tone = pct === null || Math.abs(pct) < 0.005 ? "" : pct > 0 ? "mh-up" : "mh-down";
   return (
-    <span className="mh-ticker-item">
+    <span className="mh-ticker-item" data-drop={drop}>
       <span className="mh-ticker-name">{name}</span>
       <span className="mh-ticker-price">{ltp !== null ? fmt2(ltp) : "—"}</span>
       {pct !== null ? (
@@ -51,11 +52,16 @@ function IndexPrice({ hub, id, name }: Readonly<{ hub: Hub; id: string; name: st
   );
 }
 
+/**
+ * The indices, measured into the room the title bar has (ui/fitRow.ts): the last gives way first,
+ * so a narrow window keeps NIFTY and never pushes the bar's own buttons off its edge.
+ */
 export function Ticker({ hub }: Readonly<{ hub: Hub }>) {
+  const fit = useFitRow();
   return (
-    <div className="mh-ticker" aria-label="Indices">
-      {INDICES.map((index) => (
-        <IndexPrice key={index.id} hub={hub} id={index.id} name={index.name} />
+    <div className="mh-ticker" aria-label="Indices" ref={fit}>
+      {INDICES.map((index, i) => (
+        <IndexPrice key={index.id} hub={hub} id={index.id} name={index.name} drop={INDICES.length - i} />
       ))}
     </div>
   );

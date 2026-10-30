@@ -51,6 +51,7 @@
   background: transparent;
   color: var(--mh-text-tertiary);
   cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-chipbox-x:hover {
   background: var(--mh-surface-3);
@@ -86,6 +87,17 @@
 .mh-chip-add:disabled {
   opacity: 0.45;
   cursor: default;
+}
+.mh-overlays {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+/* On a line of its own (ui/fitRow.ts marks the row) the group starts at the row's left edge, under
+   the chips, as the strip's readouts do when they wrap. */
+.mh-chips[data-overflowing] .mh-overlays {
+  margin-left: 0;
 }
 .mh-overlay {
   display: inline-flex;

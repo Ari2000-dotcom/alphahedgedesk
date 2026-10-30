@@ -36,6 +36,8 @@ export function hubUrl(): string {
 export class Hub {
   private ws: WebSocket | null = null;
   private readonly topics = new Map<string, Set<Listener>>();
+  /** Each quote topic's latest message: a quote is its whole state, so a late listener can have it. */
+  private readonly lastQuote = new Map<string, TopicMessage>();
   private readonly pending = new Map<string, Pending>();
   private readonly statusListeners = new Set<(s: HubStatus) => void>();
   private status: HubStatus = "connecting";
@@ -62,13 +64,29 @@ export class Hub {
     return () => this.statusListeners.delete(fn);
   }
 
-  /** Messages for `topic` go to `fn` until the returned function is called. */
+  /**
+   * Messages for `topic` go to `fn` until the returned function is called.
+   *
+   * The hub sends a topic's current state only on a fresh "sub", so a listener joining a topic the
+   * page already holds (the chain's spot after the title bar's index, a second chart of one
+   * straddle) would otherwise wait for the next tick, which a closed market never sends. It gets
+   * the last quote at once, or, for any other topic, the hub is asked again and sends its state
+   * (a straddle's session so far) to every listener, which each take as a fresh start.
+   */
   subscribe(topic: string, fn: Listener): () => void {
     let set = this.topics.get(topic);
     if (!set) {
       set = new Set();
       this.topics.set(topic, set);
       this.queue("sub", topic);
+    } else {
+      const joined = set;
+      const last = this.lastQuote.get(topic);
+      if (last) queueMicrotask(() => joined.has(fn) && fn(last));
+      else {
+        this.queue("unsub", topic);
+        this.queue("sub", topic);
+      }
     }
     set.add(fn);
     return () => {
@@ -77,6 +95,7 @@ export class Hub {
       s.delete(fn);
       if (s.size === 0) {
         this.topics.delete(topic);
+        this.lastQuote.delete(topic);
         this.queue("unsub", topic);
       }
     };
@@ -154,14 +173,23 @@ export class Hub {
       }
     }
     if (msg.topic) {
-      for (const fn of this.topics.get(msg.topic) ?? []) fn(msg);
+      const listeners = this.topics.get(msg.topic);
+      if (msg.t === "q" && listeners) this.lastQuote.set(msg.topic, msg);
+      for (const fn of listeners ?? []) fn(msg);
     }
   }
 
-  /** A "sub" and an "unsub" of one topic in the same tick cancel out; the rest go in one message each. */
+  /**
+   * One message of each kind per tick. A topic taken up and dropped in the same tick never reaches
+   * the hub. One dropped and taken up again (a screen switch replacing a chart with another on the
+   * same topic, a chart asking for its session again) is sent as both, the drop first: the hub sends
+   * a topic's current state (the last quote, a straddle's session so far) only on a fresh "sub", and
+   * the new listeners have none of it. Cancelling that pair left a new chart on "Connecting" for
+   * good. The hub keeps the feed itself for a while after a drop, so the pair costs it nothing.
+   */
   private queue(kind: "sub" | "unsub", topic: string): void {
     if (kind === "sub") {
-      if (!this.unsubQ.delete(topic)) this.subQ.add(topic);
+      this.subQ.add(topic);
     } else if (!this.subQ.delete(topic)) {
       this.unsubQ.add(topic);
     }

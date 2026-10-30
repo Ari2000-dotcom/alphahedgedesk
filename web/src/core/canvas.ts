@@ -48,6 +48,9 @@ export function applyCanvas(id: CanvasId): void {
     void getComputedStyle(html).color;
     html.removeAttribute("data-canvas-switching");
   }, 150);
+  // The installed app's own title bar takes the tone's frame colour, so it runs on into ours.
+  const chrome = getComputedStyle(html).getPropertyValue("--mh-chrome").trim();
+  if (chrome) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", chrome);
   try {
     localStorage.setItem(STORAGE_KEY, id);
   } catch {

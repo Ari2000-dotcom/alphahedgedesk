@@ -17,6 +17,13 @@ export interface TimeScaleOptions {
   maxBarSpacing: number;
   /** Empty bars of space kept to the right of the latest bar. */
   rightOffset: number;
+  /**
+   * MarketHub fork: Lightweight Charts' option of the same name. A new plot width keeps the bars
+   * in view and changes their spacing, instead of keeping the spacing and showing more or fewer
+   * bars. A view fitted while its panel was still narrow (a dock laying out, a split, a panel
+   * maximised) then fills the panel when it grows, rather than staying squeezed to one side.
+   */
+  lockVisibleTimeRangeOnResize: boolean;
 }
 
 export const DEFAULT_TIME_SCALE_OPTIONS: TimeScaleOptions = {
@@ -24,6 +31,7 @@ export const DEFAULT_TIME_SCALE_OPTIONS: TimeScaleOptions = {
   minBarSpacing: 1,
   maxBarSpacing: 80,
   rightOffset: 4,
+  lockVisibleTimeRangeOnResize: false,
 };
 
 export class TimeScale {
@@ -31,6 +39,7 @@ export class TimeScale {
   private _rightOffset: number;
   private readonly _minBarSpacing: number;
   private readonly _maxBarSpacing: number;
+  private readonly _lockOnResize: boolean;
   private _width = 0;
   private _baseIndex = 0;
 
@@ -40,9 +49,16 @@ export class TimeScale {
     this._rightOffset = o.rightOffset;
     this._minBarSpacing = o.minBarSpacing;
     this._maxBarSpacing = o.maxBarSpacing;
+    this._lockOnResize = o.lockVisibleTimeRangeOnResize;
   }
 
   public setWidth(width: number): void {
+    // MarketHub fork: `lockVisibleTimeRangeOnResize` scales the spacing with the width, so the
+    // span in view (width / spacing) and its right edge stay put. Not from or to a zero width: a
+    // hidden or unmeasured plot has no view to keep.
+    if (this._lockOnResize && this._width > 0 && width > 0 && width !== this._width) {
+      this._barSpacing = this.constrainBarSpacing(this._barSpacing * (width / this._width));
+    }
     this._width = width;
   }
 

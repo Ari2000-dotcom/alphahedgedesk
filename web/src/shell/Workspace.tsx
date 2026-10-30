@@ -1,5 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from "react";
 import {
   DockviewReact,
   type DockviewApi,
@@ -16,6 +15,7 @@ import { DetailsPanel, TablePanel } from "../desk/panels";
 import { ChainPanel } from "../option/ChainPanel";
 import { ScripPage, type ScripPick } from "../chart/ScripPage";
 import { ChartIcon, ChevronDownIcon, CloseIcon, MaximizeIcon, PlusIcon, RestoreIcon, SplitDownIcon, SplitRightIcon, TableIcon } from "../ui/icons";
+import { Popover } from "../ui/Popover";
 
 /**
  * The desk, QuantDesk's way (its `shell/Workspace.tsx`, on the same dockview): containers with a
@@ -206,57 +206,118 @@ function DeskTab({ api, containerApi }: IDockviewPanelHeaderProps) {
   );
 }
 
-/** The caret on a tab: what the container shows. Picking another kind opens it in place and closes this one. */
-function TypeCaret({ panelId, containerApi, onReplaced }: Readonly<{ panelId: string; containerApi: DockviewApi; onReplaced: () => void }>) {
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+/**
+ * The panel kinds as a menu under `anchor`: what a tab's caret and a strip's "+" open. It floats
+ * over the page (`Popover`), so a short container never clips it. The keys work as in every other
+ * menu: ↑/↓, Home/End move, Enter picks, Escape or Tab closes (Escape back to the button), and so
+ * does a click outside.
+ */
+function KindMenu({ anchor, onPick, onClose }: Readonly<{ anchor: RefObject<HTMLButtonElement>; onPick: (kind: PanelKind) => void; onClose: () => void }>) {
+  const box = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const [active, setActive] = useState(0);
+  const id = useId();
   useEffect(() => {
-    if (!at) return;
-    const away = () => setAt(null);
+    list.current?.focus({ preventScroll: true });
+    const away = (e: globalThis.PointerEvent) => {
+      const target = e.target as Node;
+      if (!box.current?.contains(target) && !anchor.current?.contains(target)) onClose();
+    };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
-  }, [at]);
+  }, [anchor, onClose]);
+  const last = PANEL_KINDS.length - 1;
+  const onKey = (e: React.KeyboardEvent) => {
+    const moves: Record<string, () => void> = {
+      ArrowDown: () => setActive((i) => Math.min(last, i + 1)),
+      ArrowUp: () => setActive((i) => Math.max(0, i - 1)),
+      Home: () => setActive(0),
+      End: () => setActive(last),
+      Enter: () => onPick(PANEL_KINDS[active]!.kind),
+      " ": () => onPick(PANEL_KINDS[active]!.kind),
+      Escape: () => {
+        onClose();
+        anchor.current?.focus();
+      },
+      Tab: onClose,
+    };
+    const move = moves[e.key];
+    if (!move) return;
+    if (e.key !== "Tab") e.preventDefault();
+    // A tab's own keys (dockview's) never see what the menu used.
+    e.stopPropagation();
+    move();
+  };
+  return (
+    <Popover anchor={anchor} boxRef={box}>
+      {/* Its events still bubble through React to the tab it opened from: kept from starting a drag there. */}
+      <ul
+        ref={list}
+        className="mh-menu-list"
+        role="menu"
+        tabIndex={-1}
+        aria-activedescendant={`${id}-${active}`}
+        onKeyDown={onKey}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {PANEL_KINDS.map((k, i) => (
+          <li
+            key={k.kind}
+            id={`${id}-${i}`}
+            role="menuitem"
+            className={i === active ? "mh-menu-item mh-active" : "mh-menu-item"}
+            onPointerEnter={() => setActive(i)}
+            onClick={() => onPick(k.kind)}
+          >
+            <span className="mh-menu-icon">
+              <PanelIcon kind={k.kind} />
+            </span>
+            <span className="mh-menu-text">{k.name}</span>
+            <span className="mh-menu-note">{k.note}</span>
+          </li>
+        ))}
+      </ul>
+    </Popover>
+  );
+}
+
+/** The caret on a tab: what the container shows. Picking another kind opens it in place and closes this one. */
+function TypeCaret({ panelId, containerApi, onReplaced }: Readonly<{ panelId: string; containerApi: DockviewApi; onReplaced: () => void }>) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
   return (
     <>
       <button
+        ref={button}
         type="button"
         className="mh-tab-caret"
         aria-label="Change what this container shows"
         title="Change what this container shows"
         aria-haspopup="menu"
+        aria-expanded={open}
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
         }}
         onClick={(e) => {
           e.stopPropagation();
-          const r = e.currentTarget.getBoundingClientRect();
-          setAt(at ? null : { x: r.left, y: r.bottom + 4 });
+          setOpen((o) => !o);
         }}
       >
         <ChevronDownIcon size={11} />
       </button>
-      {at
-        ? createPortal(
-            <ul className="mh-menu mh-pop mh-type-menu" role="menu" style={{ left: at.x, top: at.y }} onPointerDown={(e) => e.stopPropagation()}>
-              {PANEL_KINDS.map((k) => (
-                <li
-                  key={k.kind}
-                  role="menuitem"
-                  className="mh-menu-item"
-                  onClick={() => {
-                    setAt(null);
-                    addPanelOf(containerApi, k.kind, { referencePanel: panelId });
-                    onReplaced();
-                  }}
-                >
-                  <span className="mh-menu-text">{k.name}</span>
-                  <span className="mh-menu-note">{k.note}</span>
-                </li>
-              ))}
-            </ul>,
-            document.body,
-          )
-        : null}
+      {open ? (
+        <KindMenu
+          anchor={button}
+          onClose={close}
+          onPick={(kind) => {
+            setOpen(false);
+            addPanelOf(containerApi, kind, { referencePanel: panelId });
+            onReplaced();
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -289,24 +350,23 @@ export const PANEL_KINDS: readonly { kind: PanelKind; name: string; note: string
   { kind: "straddle", name: "Straddle chart", note: "Compare up to 5" },
   { kind: "chain", name: "Option chain", note: "Add strikes" },
   { kind: "scrip", name: "Scrip chart", note: "Candles + ATR" },
-  { kind: "table", name: "All straddles", note: "Table" },
-  { kind: "details", name: "ATM straddle", note: "Details" },
+  { kind: "table", name: "All straddles", note: "A row per chart" },
+  { kind: "details", name: "ATM straddle", note: "Legs, VWAP, IV" },
 ];
+
+/** A panel kind's mark in the menus: a chart's line or a table's grid, as its tab shows. */
+export function PanelIcon({ kind }: Readonly<{ kind: PanelKind }>) {
+  return kind === "straddle" || kind === "scrip" ? <ChartIcon size={13} /> : <TableIcon size={13} />;
+}
 
 function HeaderAdd({ containerApi, group }: IDockviewHeaderActionsProps) {
   const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: globalThis.PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
-  }, [open]);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
   return (
-    <div className="mh-header-add" ref={root} data-open={open || undefined}>
+    <div className="mh-header-add" data-open={open || undefined}>
       <button
+        ref={button}
         type="button"
         className="mh-dock-btn"
         aria-label="New tab in this container"
@@ -319,23 +379,14 @@ function HeaderAdd({ containerApi, group }: IDockviewHeaderActionsProps) {
         <PlusIcon size={14} />
       </button>
       {open ? (
-        <ul className="mh-menu mh-pop mh-add-menu" role="menu">
-          {PANEL_KINDS.map((k) => (
-            <li
-              key={k.kind}
-              role="menuitem"
-              className="mh-menu-item"
-              onPointerDown={stop}
-              onClick={() => {
-                setOpen(false);
-                addPanelOf(containerApi, k.kind, { referenceGroup: group });
-              }}
-            >
-              <span className="mh-menu-text">{k.name}</span>
-              <span className="mh-menu-note">{k.note}</span>
-            </li>
-          ))}
-        </ul>
+        <KindMenu
+          anchor={button}
+          onClose={close}
+          onPick={(kind) => {
+            setOpen(false);
+            addPanelOf(containerApi, kind, { referenceGroup: group });
+          }}
+        />
       ) : null}
     </div>
   );

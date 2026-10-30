@@ -195,6 +195,9 @@ export function StraddleChart({
       // A drag moves through time and price, TradingView's way (a double-click puts the scales
       // back to fitting what is in view).
       navigation: { mousePan: "both" },
+      // A panel that grows or shrinks keeps the same minutes in view (the fork's option): a session
+      // fitted while the dock was still laying the panel out fills it once it has its size.
+      timeScale: { lockVisibleTimeRangeOnResize: true },
     });
     chartRef.current = chart;
     for (const line of LINES) {

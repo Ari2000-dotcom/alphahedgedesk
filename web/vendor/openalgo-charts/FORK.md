@@ -35,6 +35,7 @@ Every change is marked `MarketHub fork` in the source.
 | TradingView's dotted price line (dots a line width long, two apart) | `render/axis.ts` |
 | `SeriesStyle.sessionBreaks`: a line series lifts the pen at each new trading session (read from the bars' overnight gaps), so a session VWAP draws no jump from one day's last value to the next day's first | `render/series-style.ts`, `render/line.ts` |
 | Tags, name boxes and crosshair chips with TradingView's slightly rounded corners | `render/axis.ts` (`fillTagBox`), `render/crosshair.ts` |
+| `timeScale.lockVisibleTimeRangeOnResize` (Lightweight Charts' option of that name, off by default): a new plot width keeps the bars in view and scales their spacing, rather than keeping the spacing. The app turns it on, so a chart fitted while its dock panel was still narrow fills the panel once it grows instead of staying squeezed to one side | `scale/time-scale.ts` |
 
 ## Taking a newer upstream release
 
