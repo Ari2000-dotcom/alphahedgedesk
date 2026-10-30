@@ -434,8 +434,8 @@ export function StraddlePage({
                         straddle and its session average, then IV. Spot reads on the chips row. */}
                     <span className="mh-readgroup">
                       <Readout label="ATM" value={`${fmt0(last.strike)}${last.rolled ? " (rolled)" : ""}`} />
-                      <Readout drop={3} badge label="CE" value={fmt2(last.call)} title={`${fmt0(last.strike)} call`} />
-                      <Readout drop={3} badge label="PE" value={fmt2(last.put)} title={`${fmt0(last.strike)} put`} />
+                      <Readout drop={3} badge side="call" label="CE" value={fmt2(last.call)} title={`${fmt0(last.strike)} call`} />
+                      <Readout drop={3} badge side="put" label="PE" value={fmt2(last.put)} title={`${fmt0(last.strike)} put`} />
                     </span>
                     <span className="mh-readgroup">
                       <Readout label="Straddle" value={fmt2(last.straddle)} change={first ? move(last.straddle, first.straddle) : null} />
@@ -527,6 +527,7 @@ export function StraddlePage({
           {pick && bars.length > 0 ? (
             <StraddleChart
               live={live}
+              showVix={!pick.underlying.id.startsWith("mcx:")}
               bars={chartBars}
               viewKey={viewKey}
               themeKey={themeKey}
@@ -636,11 +637,12 @@ function Readout({
   change,
   className,
   badge = false,
+  side,
   title,
   drop,
-}: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null; className?: string; badge?: boolean; title?: string; drop?: number }>) {
+}: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null; className?: string; badge?: boolean; side?: "call" | "put"; title?: string; drop?: number }>) {
   return (
-    <span className={className ? `mh-readout ${className}` : "mh-readout"} title={title} data-drop={drop}>
+    <span className={className ? `mh-readout ${className}` : "mh-readout"} title={title} data-drop={drop} data-side={side}>
       <span className={badge ? "mh-readout-label mh-readout-badge" : "mh-readout-label"}>{label}</span>
       <span className="mh-readout-value">{value}</span>
       {change ? <span className={`mh-readout-move ${change.tone}`}>{change.text}</span> : null}

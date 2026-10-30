@@ -222,12 +222,15 @@ function followPointer(chart: Chart, seriesOf: ReadonlyMap<LineId, SeriesApi>, p
 }
 
 /** The line the pointer (container y) is on at that minute, favouring the one already held. */
+/** India VIX is off on this chart (a commodity's): set by the chart each render, read by the hover. */
+let vixOff = false;
+
 function lineUnder(chart: Chart, seriesOf: ReadonlyMap<LineId, SeriesApi>, y: number, pane: number, bar: Bar): LineId | null {
   const rect = chart.plotRect(pane);
   if (!rect) return null;
   const gaps = new Map<LineId, number>();
   for (const line of LINES) {
-    if (line.pane !== pane || hiddenState.has(line.id)) continue;
+    if (line.pane !== pane || hiddenState.has(line.id) || (line.id === "vix" && vixOff)) continue;
     const v = line.value(bar);
     const series = seriesOf.get(line.id);
     if (v === null || !Number.isFinite(v) || !series) continue;
@@ -281,7 +284,10 @@ export function StraddleChart({
   extras = [],
   onHover,
   live = false,
+  showVix = true,
 }: Readonly<{
+  /** India VIX belongs to the equity indices: a commodity's chart leaves it off. */
+  showVix?: boolean;
   /** Today's session, still ticking: its lines end in a pulsing dot. */
   live?: boolean;
   /** The straddles picked on the option chain: each a line beside the ATM one. */
@@ -315,6 +321,9 @@ export function StraddleChart({
   const hidden = useHidden();
   const hiddenRef = useRef(hidden);
   hiddenRef.current = hidden;
+  vixOff = !showVix;
+  const vixOffRef = useRef(!showVix);
+  vixOffRef.current = !showVix;
   const focus = useFocus();
   const barAt = useRef(new Map<number, Bar>());
   const liveRef = useRef({ live, bars });
@@ -359,7 +368,7 @@ export function StraddleChart({
           // The VWAP restarts every session: no line from one day's last value up or down to the
           // next day's first, as TradingView draws a session VWAP.
           sessionBreaks: line.id === "vwap",
-          visible: !hiddenRef.current.has(line.id),
+          visible: !hiddenRef.current.has(line.id) && !(line.id === "vix" && vixOffRef.current),
         },
       });
       seriesRef.current.set(line.id, series);
@@ -398,7 +407,7 @@ export function StraddleChart({
     READ_ORDER.map(lineOf)
       .filter((l) => l.pane === 1)
       .forEach((l, row) => {
-        const legend = new PaneLegend({ id: l.id, title: l.label, color: token(l.colour), row, font: LEGEND_FONT, actions: ["hide"], hidden: hiddenRef.current.has(l.id) });
+        const legend = new PaneLegend({ id: l.id, title: l.label, color: token(l.colour), row, font: LEGEND_FONT, actions: ["hide"], hidden: hiddenRef.current.has(l.id), visible: !(l.id === "vix" && vixOffRef.current) });
         chart.addPrimitive(legend, 1);
         legendRef.current.set(l.id, legend);
       });
@@ -461,11 +470,11 @@ export function StraddleChart({
   /* -- shown and hidden lines --------------------------------------------------------------------- */
   useEffect(() => {
     for (const line of LINES) {
-      const off = hidden.has(line.id);
+      const off = hidden.has(line.id) || (line.id === "vix" && !showVix);
       seriesRef.current.get(line.id)?.applyOptions({ visible: !off });
-      legendRef.current.get(line.id)?.setOptions({ hidden: off });
+      legendRef.current.get(line.id)?.setOptions({ hidden: hidden.has(line.id), visible: !(line.id === "vix" && !showVix) });
     }
-  }, [hidden]);
+  }, [hidden, showVix]);
 
   /* -- data: a new picture, a live minute, or an earlier session put in front --------------------- */
   useEffect(() => {

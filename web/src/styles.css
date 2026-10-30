@@ -967,6 +967,21 @@ input {
   font-size: var(--mh-size-micro);
   line-height: 18px;
 }
+/* A call's reading is green and a put's red, the badge and the price alike. */
+.mh-readout[data-side="call"] .mh-readout-badge {
+  background: color-mix(in srgb, var(--mh-up) 18%, transparent);
+  color: var(--mh-up);
+}
+.mh-readout[data-side="put"] .mh-readout-badge {
+  background: color-mix(in srgb, var(--mh-down) 18%, transparent);
+  color: var(--mh-down);
+}
+.mh-readout[data-side="call"] .mh-readout-value {
+  color: var(--mh-up);
+}
+.mh-readout[data-side="put"] .mh-readout-value {
+  color: var(--mh-down);
+}
 .mh-readout-move.mh-up {
   color: var(--mh-up);
 }

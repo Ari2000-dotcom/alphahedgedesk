@@ -23,8 +23,8 @@ export const CANVAS_TONES: readonly { id: CanvasId; name: string; note: string }
 ];
 
 // A new key, so everyone starts on the new default instead of a tone saved before it existed.
-const STORAGE_KEY = "mh.canvas.v3";
-const DEFAULT: CanvasId = "tradingview";
+const STORAGE_KEY = "mh.canvas.v4";
+const DEFAULT: CanvasId = "neutral";
 
 /** Anything unrecognised falls back to the default. */
 export function loadCanvas(): CanvasId {

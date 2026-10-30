@@ -167,8 +167,8 @@ export function DetailsPanel({ hub }: Readonly<{ hub: Hub }>) {
   const left = yearsToExpiry(s.expiry, mcx) * 365 * 24 * 60;
   const toExpiry = left <= 0 ? "Expired" : left >= 1440 ? `${Math.floor(left / 1440)}d ${Math.floor((left % 1440) / 60)}h` : `${Math.floor(left / 60)}h ${Math.floor(left % 60)}m`;
   const facts: [string, string, string?][] = [
-    ["Call", fmt2(s.last.call)],
-    ["Put", fmt2(s.last.put)],
+    ["Call", fmt2(s.last.call), "mh-up"],
+    ["Put", fmt2(s.last.put), "mh-down"],
     ["VWAP", f.vwap === null ? "—" : fmt2(f.vwap)],
     ["vs VWAP", f.vsVwap === null ? "—" : sign(f.vsVwap, 2), f.vsVwap === null ? undefined : tone(f.vsVwap)],
     ["ATM IV", f.iv === null ? "—" : `${f.iv.toFixed(2)}%`],
