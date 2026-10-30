@@ -152,7 +152,10 @@ export function ScripPage({
   const atr = useMemo(() => atrPoints(candles, ATR_PERIOD), [candles]);
   const viewKey = `${id}|${interval}`;
   const latestAtr = atr[atr.length - 1];
-  const atrValue = latestAtr && "value" in latestAtr ? latestAtr.value : null;
+  // The ATR on the candles as the ticks build them (`ScripChart` reports it), else the hub's candles' own.
+  const [liveAtr, setLiveAtr] = useState<number | null>(null);
+  useEffect(() => setLiveAtr(null), [candles]);
+  const atrValue = liveAtr ?? (latestAtr && "value" in latestAtr ? latestAtr.value : null);
 
   // Yesterday's close: the reference every "Chg" reads from, independent of the chart's own
   // interval — a 5m chart's last two bars are minutes apart, not a day's move.
@@ -341,6 +344,7 @@ export function ScripPage({
               chartType={chartType}
               indicators={indicators}
               tick={tick}
+              onAtr={setLiveAtr}
               atp={atp}
               stepSec={spec.seconds}
               name={underlyingOf.get(id)?.name ?? id}

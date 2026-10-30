@@ -4,6 +4,7 @@ import { createChart, type Bar as OaBar, type Chart, type SeriesApi } from "open
 import { fmt0, fmt2, istDate } from "../core/format";
 import { priceAxisWidth, themeFromPage, token } from "./chartTheme";
 import { isLineType, type ScripChartType } from "./chartType";
+import { ATR_PERIOD, atrPoints } from "./useCandles";
 import { INDICATORS, sessionAverage, type IndicatorId } from "./indicators";
 import { OiProfileBars, type OiBarLevel } from "./OiProfileBars";
 import type { OiProfileData, OiProfileMode } from "./useOiProfile";
@@ -100,6 +101,7 @@ export function ScripChart({
   tick,
   atp,
   stepSec,
+  onAtr,
   name,
   colors,
   oiProfile,
@@ -117,6 +119,8 @@ export function ScripChart({
   atp: number | null;
   /** The interval, seconds: when the forming candle closes and the next one opens. */
   stepSec: number;
+  /** The latest ATR on the candles including the forming one, as it moves with each tick. */
+  onAtr?: (value: number | null) => void;
   /** The instrument's name, in a box beside its price tag. */
   name: string;
   colors: { up: string; down: string };
@@ -138,6 +142,9 @@ export function ScripChart({
   const shownKey = useRef("");
   /** The candle the next tick lands on: the hub's last one, then whatever ticks have made of it. */
   const forming = useRef<OaBar | null>(null);
+  /** The candles on the chart as they are now: the hub's, with the ones the ticks have built on the end. */
+  const bars = useRef<OaBar[]>([]);
+  const refreshFrame = useRef(0);
   /** The ATP level: a one-point line series, so it takes the name box, value tag and dotted level
    *  every other line on the chart has. */
   const atpRef = useRef<SeriesApi | null>(null);
@@ -228,6 +235,9 @@ export function ScripChart({
       oiBarsRef.current = null;
       shownKey.current = "";
       forming.current = null;
+      bars.current = [];
+      cancelAnimationFrame(refreshFrame.current);
+      refreshFrame.current = 0;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -248,13 +258,42 @@ export function ScripChart({
     }
     price.update(next);
     forming.current = next;
+    const held = bars.current;
+    if (held.length > 0 && held[held.length - 1]!.time === next.time) held[held.length - 1] = next;
+    else held.push(next);
+    scheduleRefresh();
+  };
+
+  /**
+   * The lines that follow from the candles (VWAP, the averages, Supertrend, ATR, RSI) and the ATR
+   * read-out move with the forming candle: their last points are worked out again from the candles
+   * as they are now, once a frame however many ticks arrive.
+   */
+  const refreshLive = () => {
+    const held = bars.current;
+    if (held.length === 0) return;
+    for (const [id, series] of linesRef.current) {
+      const def = INDICATORS.find((d) => d.id === id)!;
+      for (const point of def.points(held, colors).slice(-2)) series.update(point);
+    }
+    if (onAtr) {
+      const last = atrPoints(held, ATR_PERIOD).at(-1);
+      onAtr(last && "value" in last ? last.value : null);
+    }
+  };
+  const scheduleRefresh = () => {
+    if (refreshFrame.current) return;
+    refreshFrame.current = requestAnimationFrame(() => {
+      refreshFrame.current = 0;
+      refreshLive();
+    });
   };
 
   /** Every indicator line's points from the candles on the chart. */
   const fillLines = () => {
     for (const [id, series] of linesRef.current) {
       const def = INDICATORS.find((d) => d.id === id)!;
-      series.setData(def.points(candles, colors));
+      series.setData(def.points(bars.current.length > 0 ? bars.current : candles, colors));
     }
   };
 
@@ -300,6 +339,7 @@ export function ScripChart({
     if (!chart || !price) return;
     price.setData(candles);
     if (chartType === "baseline") price.applyOptions({ baseValue: midpoint(candles) });
+    bars.current = [...candles];
     fillLines();
     forming.current = candles[candles.length - 1] ?? null;
     if (tick) apply(tick);
@@ -327,7 +367,7 @@ export function ScripChart({
     let price = showAtp ? atp : null;
     let name = "ATP";
     if (showAtp && price === null && stepSec < 86_400) {
-      price = todayAverage(candles, forming.current);
+      price = todayAverage(bars.current.length > 0 ? bars.current : candles, null);
       name = "Avg";
     }
     const at = forming.current?.time ?? candles[candles.length - 1]?.time;
