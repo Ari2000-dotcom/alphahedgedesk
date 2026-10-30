@@ -18,6 +18,28 @@ export const SearchIcon = ({ size }: P) => (
   </Icon>
 );
 
+/** A desk: a tall container beside two stacked ones, the shape of a workspace. */
+export const WorkspaceIcon = ({ size }: P) => (
+  <Icon size={size}>
+    <rect x="3" y="3" width="8" height="18" rx="2" />
+    <rect x="14" y="3" width="7" height="8" rx="2" />
+    <rect x="14" y="14" width="7" height="7" rx="2" />
+  </Icon>
+);
+
+export const SaveIcon = ({ size }: P) => (
+  <Icon size={size}>
+    <path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+    <path d="M7 3v5h8V3M7 21v-7h10v7" />
+  </Icon>
+);
+
+export const TrashIcon = ({ size }: P) => (
+  <Icon size={size}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+  </Icon>
+);
+
 export const CloseIcon = ({ size }: P) => (
   <Icon size={size}>
     <path d="M18 6 6 18M6 6l12 12" />

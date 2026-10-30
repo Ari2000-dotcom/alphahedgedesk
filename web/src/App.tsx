@@ -10,6 +10,8 @@ import { useFullscreen } from "./core/fullscreen";
 import { Dropdown } from "./ui/Dropdown";
 import { FullscreenEnterIcon, FullscreenExitIcon, PaletteIcon } from "./ui/icons";
 import { Logo } from "./ui/Logo";
+import { WorkspaceNav } from "./shell/WorkspaceMenu";
+import type { SavedWorkspace } from "./core/workspaces";
 
 const STATUS_TEXT: Record<HubStatus, string> = {
   connecting: "Connecting",
@@ -53,6 +55,19 @@ export function App() {
     fn(api);
     window.setTimeout(() => setPanelCount(api.panels.length), 400);
   };
+  // A saved workspace: on the Workspace screen, its layout laid in place of this one.
+  const loadWorkspace = (workspace: SavedWorkspace) => {
+    setView("workspace");
+    setLayout("custom");
+    lay((api) => {
+      if (currentView() !== "workspace") switchView(api, "workspace");
+      try {
+        api.fromJSON(workspace.layout as Parameters<DockviewApi["fromJSON"]>[0]);
+      } catch {
+        // A layout that will not restore leaves the desk as it was.
+      }
+    });
+  };
   useEffect(() => hub?.onStatus(setStatus), [hub]);
   const [fullscreen, toggleFullscreen] = useFullscreen();
 
@@ -64,7 +79,20 @@ export function App() {
           MarketHub
         </div>
         <nav className="mh-nav" aria-label="Screens">
-          {VIEWS.map((v) => (
+          {VIEWS.map((v) =>
+            v.id === "workspace" ? (
+              <WorkspaceNav
+                key={v.id}
+                active={view === v.id}
+                getApi={() => dock.current}
+                onOpen={() => {
+                  setView(v.id);
+                  setLayout("custom");
+                  lay((api) => switchView(api, v.id));
+                }}
+                onLoad={loadWorkspace}
+              />
+            ) : (
             <button
               key={v.id}
               type="button"
@@ -78,7 +106,8 @@ export function App() {
             >
               {v.name}
             </button>
-          ))}
+            ),
+          )}
         </nav>
         <span className="mh-spacer" />
         {hub ? <Ticker hub={hub} /> : null}

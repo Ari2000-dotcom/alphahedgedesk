@@ -1,0 +1,285 @@
+/* The Workspace tab and its menu of saved desks (shell/WorkspaceMenu.tsx). */
+
+.mh-wsnav {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.mh-nav-icon {
+  gap: 7px;
+}
+.mh-nav-icon svg {
+  opacity: 0.85;
+}
+.mh-nav-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  margin: 8px 6px 8px -8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-nav-caret:hover,
+.mh-nav-caret[aria-expanded="true"] {
+  background: var(--mh-surface-1);
+  color: var(--mh-text-strong);
+}
+
+.mh-ws {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 2px);
+  left: 0;
+  width: 340px;
+  padding: 10px;
+  border: 1px solid var(--mh-line-strong);
+  border-radius: calc(var(--mh-radius-small) + 3px);
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  font-size: var(--mh-size-control);
+}
+
+/* The search: a well with its icon inside, blue on focus. */
+.mh-ws-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.mh-ws-search > svg {
+  position: absolute;
+  left: 10px;
+  color: var(--mh-text-tertiary);
+  pointer-events: none;
+}
+.mh-ws-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 30px 0 32px;
+  border: 1px solid var(--mh-line);
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-well);
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+  outline: none;
+  transition: border-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-ws-search input:hover {
+  border-color: var(--mh-line-strong);
+}
+.mh-ws-search input:focus {
+  border-color: var(--mh-dock-accent);
+}
+.mh-ws-search input::placeholder {
+  color: var(--mh-text-disabled);
+}
+.mh-ws-search button {
+  position: absolute;
+  right: 6px;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  cursor: pointer;
+}
+.mh-ws-search button:hover {
+  background: var(--mh-surface-3);
+  color: var(--mh-text-strong);
+}
+
+.mh-ws-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 2px 6px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mh-ws-head em {
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.mh-ws-list {
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+}
+.mh-ws-list li {
+  position: relative;
+}
+.mh-ws-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 34px 7px 8px;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-ws-item:hover {
+  background: var(--mh-surface-3);
+}
+.mh-ws-item[data-current] {
+  background: color-mix(in srgb, var(--mh-dock-accent) 14%, transparent);
+}
+.mh-ws-item > svg {
+  color: var(--mh-dock-accent);
+}
+.mh-ws-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-surface-1);
+  color: var(--mh-text-secondary);
+}
+.mh-ws-item[data-current] .mh-ws-icon {
+  background: color-mix(in srgb, var(--mh-dock-accent) 22%, transparent);
+  color: var(--mh-dock-accent);
+}
+.mh-ws-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.mh-ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--mh-weight-emphasis);
+}
+.mh-ws-meta {
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+.mh-ws-del {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-tertiary);
+  opacity: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--mh-dur-fast) var(--mh-ease),
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-ws-list li:hover .mh-ws-del,
+.mh-ws-del:focus-visible {
+  opacity: 1;
+}
+.mh-ws-del:hover {
+  background: var(--mh-surface-1);
+  color: var(--mh-down);
+}
+.mh-ws-item[data-current] ~ .mh-ws-del {
+  right: 28px;
+}
+
+.mh-ws-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+  text-align: center;
+}
+
+.mh-ws-save {
+  margin-top: 6px;
+  border-top: 1px solid var(--mh-line);
+}
+.mh-ws-savebar {
+  display: flex;
+  gap: 6px;
+}
+.mh-ws-savebar input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--mh-line);
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-well);
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+  outline: none;
+  transition: border-color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-ws-savebar input:hover {
+  border-color: var(--mh-line-strong);
+}
+.mh-ws-savebar input:focus {
+  border-color: var(--mh-dock-accent);
+}
+.mh-ws-savebar input::placeholder {
+  color: var(--mh-text-disabled);
+}
+.mh-ws-savebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: var(--mh-dock-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: var(--mh-weight-emphasis);
+  cursor: pointer;
+  transition: filter var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-ws-savebtn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.mh-ws-savebtn:disabled {
+  background: var(--mh-surface-3);
+  color: var(--mh-text-disabled);
+  cursor: default;
+}
+.mh-ws-flash {
+  min-height: 16px;
+  margin-top: 6px;
+  color: var(--mh-up);
+  font-size: var(--mh-size-caption);
+}
