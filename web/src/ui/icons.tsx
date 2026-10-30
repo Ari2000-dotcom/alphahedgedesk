@@ -298,6 +298,13 @@ export function Spinner({ size = 16 }: P) {
   );
 }
 
+/** An option chain: calls and puts in rows either side of the strike column. */
+export const ChainIcon = ({ size }: P) => (
+  <Icon size={size}>
+    <path d="M12 3v18M3.5 6.5h5M15.5 6.5h5M3.5 12h5M15.5 12h5M3.5 17.5h5M15.5 17.5h5" />
+  </Icon>
+);
+
 export const TableIcon = ({ size }: P) => (
   <Icon size={size}>
     <rect x="3" y="4" width="18" height="16" rx="2" />

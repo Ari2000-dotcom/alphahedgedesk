@@ -147,12 +147,24 @@ input {
 .mh-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-right: 18px;
+  gap: 9px;
+  margin-right: 20px;
   color: var(--mh-text-strong);
   font-size: var(--mh-size-body);
   font-weight: var(--mh-weight-emphasis);
   white-space: nowrap;
+}
+
+.mh-logo {
+  flex: 0 0 auto;
+  display: block;
+}
+/* The logo's colours in words: "Alpha" in the strong ink, "Hedge" in the logo's violet. */
+.mh-wordmark {
+  color: var(--mh-text-strong);
+}
+.mh-wordmark-hedge {
+  color: var(--mh-logo-violet);
 }
 
 .mh-nav {
@@ -163,6 +175,7 @@ input {
   position: relative;
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 0 14px;
   border: 0;
   background: transparent;
@@ -184,7 +197,7 @@ input {
   bottom: -1px;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--mh-brand);
+  background: var(--mh-logo-violet);
 }
 
 /* The indices: name quiet, price strong, the day's move in its colour. */

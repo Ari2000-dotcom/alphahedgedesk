@@ -8,7 +8,7 @@ import { UpdateToast } from "./shell/UpdateToast";
 import { addPanelOf, applyPreset, currentView, PANEL_KINDS, PRESETS, switchView, VIEWS, Workspace, type Preset, type View } from "./shell/Workspace";
 import { useFullscreen } from "./core/fullscreen";
 import { Dropdown } from "./ui/Dropdown";
-import { FullscreenEnterIcon, FullscreenExitIcon, PaletteIcon } from "./ui/icons";
+import { ChainIcon, ChartIcon, FullscreenEnterIcon, FullscreenExitIcon, PaletteIcon } from "./ui/icons";
 import { Logo } from "./ui/Logo";
 import { WorkspaceNav } from "./shell/WorkspaceMenu";
 import type { SavedWorkspace } from "./core/workspaces";
@@ -76,7 +76,9 @@ export function App() {
       <header className="mh-titlebar">
         <div className="mh-brand">
           <Logo />
-          MarketHub
+          <span className="mh-wordmark">
+            Alpha<span className="mh-wordmark-hedge">Hedge</span>
+          </span>
         </div>
         <nav className="mh-nav" aria-label="Screens">
           {VIEWS.map((v) =>
@@ -104,6 +106,7 @@ export function App() {
                 lay((api) => switchView(api, v.id));
               }}
             >
+              {v.id === "straddle" ? <ChartIcon size={16} /> : <ChainIcon size={16} />}
               {v.name}
             </button>
             ),

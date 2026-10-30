@@ -1,6 +1,6 @@
 {
-  "name": "MarketHub",
-  "short_name": "MarketHub",
+  "name": "AlphaHedge",
+  "short_name": "AlphaHedge",
   "description": "ATM straddle: spot, synthetic future, premium and its VWAP, ATM IV and India VIX, minute by minute.",
   "start_url": "/",
   "scope": "/",

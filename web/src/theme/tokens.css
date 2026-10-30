@@ -1,5 +1,5 @@
 /*
- * MarketHub design tokens, once: AlphaHedge's palette.
+ * AlphaHedge design tokens, once.
  *
  * Warm neutral greys, text never pure white, one brand hue (a muted gold) for
  * the mark, the current screen and the focus ring only. The one primary action
@@ -288,6 +288,11 @@
   --mh-brand: #c9a45c;
   --mh-brand-rgb: 201 164 92;
   --mh-focus: #c9a45c;
+  /* The logo's own colours: its blue strokes on a white disc in every theme, and its violet
+     lifted to read on the dark title bar (the wordmark's "Hedge" and the current screen). */
+  --mh-logo-ink: #2b2e8d;
+  --mh-logo-disc: #ffffff;
+  --mh-logo-violet: #9497ec;
 
   /* -- the one primary action: ink on the dark ground --------------------- */
   --mh-primary-bg: #e2e0da;

@@ -22,7 +22,7 @@ export function UpdateToast() {
     <div className="mh-update" role="status">
       <span className="mh-update-dot" aria-hidden />
       <span className="mh-update-text">
-        <span className="mh-update-title">A new version of MarketHub is ready</span>
+        <span className="mh-update-title">A new version of AlphaHedge is ready</span>
         <em>Your layout and picks are saved — refreshing keeps them.</em>
       </span>
       <button type="button" className="mh-btn mh-update-go" onClick={() => location.reload()}>
