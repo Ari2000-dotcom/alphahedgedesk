@@ -156,7 +156,13 @@ export function WorkspaceNav({
 
   return (
     <div className="mh-wsnav" ref={root}>
-      <button type="button" className="mh-nav-item mh-nav-icon" aria-current={active ? "page" : undefined} onClick={onOpen}>
+      <button
+        type="button"
+        className="mh-nav-item mh-nav-icon"
+        aria-current={active ? "page" : undefined}
+        // On the Workspace screen already, the name has nothing else to do: it opens the menu too.
+        onClick={() => (active ? setOpen((v) => !v) : onOpen())}
+      >
         <WorkspaceIcon size={16} />
         Workspace
       </button>

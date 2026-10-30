@@ -8,12 +8,15 @@
 }
 .mh-nav-icon {
   gap: 7px;
+  padding-right: 6px;
 }
 .mh-nav-caret {
   display: inline-grid;
   place-items: center;
+  position: relative;
+  z-index: 1;
   width: 18px;
-  margin: 9px 6px 9px -10px;
+  margin: 9px 8px 9px 0;
   padding: 0;
   border: 0;
   border-radius: var(--mh-radius-small);
