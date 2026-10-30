@@ -37,6 +37,7 @@ Every change is marked `MarketHub fork` in the source.
 | Tags, name boxes and crosshair chips with TradingView's slightly rounded corners | `render/axis.ts` (`fillTagBox`), `render/crosshair.ts` |
 | `SeriesStyle.bodyRadius`: candle bodies with rounded corners, shrunk to fit a small body and square below 4 device px | `render/series-style.ts`, `render/candles.ts` |
 | The bar countdown under the last-price tag in its own boxes, one per unit (`02m` `07s`, hours in front while an hour or more is left), a shade darker, not a second row inside the tag: the tag and the name box beside it stay one row on the price line, and tag spreading reserves the room for both | `render/axis.ts` (`COUNTDOWN_BOX_HEIGHT`, `countdownSegments`, `countdownBlockOffset`, `drawLastPriceTag`), `core/pane.ts` |
+| `timeScale.lockVisibleTimeRangeOnResize` (Lightweight Charts' option of that name, off by default): a new plot width keeps the bars in view and scales their spacing, rather than keeping the spacing. The app turns it on, so a chart fitted while its dock panel was still narrow fills the panel once it grows instead of staying squeezed to one side | `scale/time-scale.ts` |
 
 ## Taking a newer upstream release
 

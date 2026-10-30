@@ -28,6 +28,8 @@ import {
   DeltaOiIcon,
 } from "../ui/icons";
 import { MultiDropdown } from "../ui/MultiDropdown";
+import { useFitRow } from "../ui/fitRow";
+import { IntervalPicker } from "./IntervalPicker";
 import { ATR_PERIOD, atrPoints, CANDLE_INTERVALS, useCandles } from "./useCandles";
 import { delta76, yearsToExpiry } from "../core/black76";
 import { useDeltaOi, type Band } from "../greeks/useDeltaOi";
@@ -47,6 +49,10 @@ import { INDICATORS, useIndicators } from "./indicators";
 
 const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
 const DEFAULT_INTERVAL = "5m";
+
+/** A change's sign and colour; nothing either way for no change, never "−0.00". */
+const signOf = (v: number) => (v > 0.0049 ? "+" : v < -0.0049 ? "−" : "");
+const toneOf = (v: number) => (v > 0.0049 ? "mh-up" : v < -0.0049 ? "mh-down" : "");
 type OiView = OiProfileMode | "delta" | "off";
 const OI_VIEWS: readonly {
   value: OiView;
@@ -148,9 +154,11 @@ export function ScripPage({
   const deltaProfile = useExposureTrend(deltaRows, deltaOn, deltaKey);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
-  const { candles, loading, error, note } = useCandles(id, spec.value, spec.days);
+  const { candles, forKey, loading, error, note } = useCandles(id, spec);
   const atr = useMemo(() => atrPoints(candles, ATR_PERIOD), [candles]);
-  const viewKey = `${id}|${interval}`;
+  // The view follows the candles drawn, not the interval asked for: the old interval's candles stay
+  // up while the new one loads, and the chart fits the new ones only when they are there.
+  const viewKey = forKey;
   const latestAtr = atr[atr.length - 1];
   // The ATR on the candles as the ticks build them (`ScripChart` reports it), else the hub's candles' own.
   const [liveAtr, setLiveAtr] = useState<number | null>(null);
@@ -204,6 +212,7 @@ export function ScripPage({
   const last = live ?? candles[candles.length - 1]?.close ?? null;
   const chg = last !== null && prevClose !== null ? last - prevClose : null;
   const chgPct = chg !== null && prevClose ? (chg / prevClose) * 100 : null;
+  const fitReadouts = useFitRow();
 
   const quickPick = (name: string) => {
     const u = universe.find((x) => x.name === name);
@@ -231,17 +240,10 @@ export function ScripPage({
             options={underlyingOptions}
           />
           <span className="mh-tv-sep" aria-hidden />
-          {/* TradingView's toolbar: no chevron on the interval, the chart type, the candles or the indicators. */}
+          <IntervalPicker value={interval} onChange={setInterval_} />
+          <span className="mh-tv-sep" aria-hidden />
+          {/* TradingView's toolbar: no chevron on the chart type, the candles or the indicators. */}
           <span className="mh-tv-bare">
-            <Dropdown
-              label="Interval"
-              caption={false}
-              value={interval}
-              onChange={setInterval_}
-              renderValue={(o) => o?.label ?? null}
-              options={CANDLE_INTERVALS.map((c) => ({ value: c.value, label: c.label, separator: c.value === "1d" }))}
-            />
-            <span className="mh-tv-sep" aria-hidden />
             <Dropdown
               label="Chart type"
               caption={false}
@@ -315,20 +317,36 @@ export function ScripPage({
             </>
           ) : null}
           <span className="mh-spacer" />
+          {/* A new interval loads behind the candles already up: said quietly, not by blanking them. */}
+          {id && candles.length > 0 && (loading || note) ? (
+            <span className="mh-hint">
+              <Spinner size={13} />
+              {note ?? `Loading ${spec.name}`}
+            </span>
+          ) : null}
           {id && last !== null ? (
-            <div className="mh-readouts">
+            // Measured like the straddle strip's (ui/fitRow.ts): ATR gives way first, then the
+            // day's change, and the last price always stays, never cut at the panel's edge.
+            <div className="mh-readouts" ref={fitReadouts}>
               <span className="mh-readgroup">
                 <span className="mh-readout">
                   <span className="mh-readout-label">Last</span>
                   <span className="mh-readout-value">{fmt2(last)}</span>
                   {chg !== null && chgPct !== null ? (
-                    <span className={`mh-readout-move ${chg > 0 ? "mh-up" : chg < 0 ? "mh-down" : ""}`}>
-                      {chg > 0 ? "+" : chg < 0 ? "−" : ""}
-                      {fmt2(Math.abs(chg))} ({chgPct > 0 ? "+" : "−"}
-                      {Math.abs(chgPct).toFixed(2)}%)
-                    </span>
+                    <>
+                      <span className={`mh-readout-delta ${toneOf(chg)}`} data-drop={2}>
+                        {signOf(chg)}
+                        {fmt2(Math.abs(chg))}
+                      </span>
+                      <span className={`mh-readout-move ${toneOf(chg)}`} data-drop={2}>
+                        {signOf(chgPct)}
+                        {Math.abs(chgPct).toFixed(2)}%
+                      </span>
+                    </>
                   ) : null}
                 </span>
+              </span>
+              <span className="mh-readgroup" data-drop={1}>
                 <span className="mh-readout">
                   <span className="mh-readout-label">ATR {ATR_PERIOD}</span>
                   <span className="mh-readout-value">{atrValue !== null ? fmt2(atrValue) : "—"}</span>

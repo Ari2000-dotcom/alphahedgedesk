@@ -4,24 +4,69 @@ import { atr, type Bar as OaBar, type LinePoint, type Whitespace } from "openalg
 import { istDate } from "../core/format";
 
 /**
- * The hub's `/history` intervals a scrip chart offers, and how many calendar days back each asks
- * for — short enough to stay under the hub's 92-day-per-request cap, long enough to warm up a
- * 14-period ATR with room to spare.
+ * The intervals a scrip chart offers, TradingView's set as far as the hub's `/history` reaches:
+ * every interval it serves, and 2h and 4h built from its hourly candles. Each asks for enough
+ * calendar days to warm up a 14-period ATR with room to spare and to stay under the hub's
+ * 92-day-per-request cap; the hourly ones share one request.
  */
 export interface CandleInterval {
+  /** Ours, and what a saved panel remembers. */
   value: string;
+  /** Short, for the toolbar: `5m`, `1h`, `1D`. */
   label: string;
+  /** Long, for the menu: `5 minutes`. */
+  name: string;
+  group: "Minutes" | "Hours" | "Days";
+  /** The hub's interval the candles are asked in. */
+  source: string;
+  /** How many of the source's candles make one of these, counted from each session's first. */
+  merge: number;
   days: number;
   /** One candle, seconds: when a live candle closes and the next opens. */
   seconds: number;
 }
 
 export const CANDLE_INTERVALS: readonly CandleInterval[] = [
-  { value: "5m", label: "5m", days: 15, seconds: 300 },
-  { value: "15m", label: "15m", days: 30, seconds: 900 },
-  { value: "60m", label: "1h", days: 60, seconds: 3600 },
-  { value: "1d", label: "1D", days: 90, seconds: 86_400 },
+  { value: "1m", label: "1m", name: "1 minute", group: "Minutes", source: "1m", merge: 1, days: 5, seconds: 60 },
+  { value: "3m", label: "3m", name: "3 minutes", group: "Minutes", source: "3m", merge: 1, days: 10, seconds: 180 },
+  { value: "5m", label: "5m", name: "5 minutes", group: "Minutes", source: "5m", merge: 1, days: 15, seconds: 300 },
+  { value: "15m", label: "15m", name: "15 minutes", group: "Minutes", source: "15m", merge: 1, days: 30, seconds: 900 },
+  { value: "30m", label: "30m", name: "30 minutes", group: "Minutes", source: "30m", merge: 1, days: 45, seconds: 1800 },
+  { value: "60m", label: "1h", name: "1 hour", group: "Hours", source: "60m", merge: 1, days: 60, seconds: 3600 },
+  { value: "2h", label: "2h", name: "2 hours", group: "Hours", source: "60m", merge: 2, days: 60, seconds: 7200 },
+  { value: "4h", label: "4h", name: "4 hours", group: "Hours", source: "60m", merge: 4, days: 60, seconds: 14_400 },
+  { value: "1d", label: "1D", name: "1 day", group: "Days", source: "1d", merge: 1, days: 90, seconds: 86_400 },
 ];
+
+/**
+ * `merge` source candles to one, counted afresh from each IST session's first candle, as
+ * TradingView aligns its intraday bars to the session open: NSE's 2h bars open at 09:15, 11:15,
+ * 13:15 and 15:15, its 4h bars at 09:15 and 13:15.
+ */
+export function mergeCandles(candles: readonly OaBar[], merge: number): OaBar[] {
+  if (merge <= 1) return [...candles];
+  const out: OaBar[] = [];
+  let day = "";
+  let inDay = 0;
+  for (const c of candles) {
+    const d = istDate(c.time * 1000);
+    if (d !== day) {
+      day = d;
+      inDay = 0;
+    }
+    const last = out[out.length - 1];
+    if (inDay % merge === 0 || !last) {
+      out.push({ ...c });
+    } else {
+      last.high = Math.max(last.high, c.high);
+      last.low = Math.min(last.low, c.low);
+      last.close = c.close;
+      if (c.volume !== undefined) last.volume = (last.volume ?? 0) + c.volume;
+    }
+    inDay++;
+  }
+  return out;
+}
 
 export const ATR_PERIOD = 14;
 
@@ -71,6 +116,12 @@ const RETRY_MS = [2_000, 5_000, 10_000, 20_000];
 
 export interface CandleState {
   candles: OaBar[];
+  /**
+   * `id|interval` of the candles held. While a new interval loads, the old one's candles stay on
+   * screen and this still names them, so the chart fits the new candles when they arrive instead
+   * of fitting the old ones under the new interval's name.
+   */
+  forKey: string;
   loading: boolean;
   error: string | null;
   /** Said while a request waits on the hub's history allowance, so a slow load is not silent. */
@@ -78,28 +129,29 @@ export interface CandleState {
 }
 
 /**
- * `id`'s candles for the last `days`, asked again whenever the instrument, interval or range
- * changes. A new interval of the same instrument keeps the candles on screen until its own
- * arrive, so the chart is not torn down and rebuilt on every switch; a 429 from the hub waits and
- * asks again rather than failing the chart.
+ * `id`'s candles in `spec`'s interval, asked again whenever the instrument or interval changes
+ * (2h and 4h are the hourly answer merged, `mergeCandles`). A new interval of the same instrument
+ * keeps the candles on screen until its own arrive, so the chart is not torn down and rebuilt on
+ * every switch; a 429 from the hub waits and asks again rather than failing the chart.
  */
-export function useCandles(id: string, interval: string, days: number): CandleState {
-  const [state, setState] = useState<CandleState>({ candles: [], loading: false, error: null, note: null });
+export function useCandles(id: string, spec: CandleInterval): CandleState {
+  const { value: interval, source, merge, days } = spec;
+  const [state, setState] = useState<CandleState>({ candles: [], forKey: "", loading: false, error: null, note: null });
   const [shownId, setShownId] = useState(id);
   useEffect(() => {
     if (!id) {
-      setState({ candles: [], loading: false, error: null, note: null });
+      setState({ candles: [], forKey: "", loading: false, error: null, note: null });
       return;
     }
     let cancelled = false;
     let timer = 0;
     const sameInstrument = id === shownId;
     setShownId(id);
-    setState((was) => ({ candles: sameInstrument ? was.candles : [], loading: true, error: null, note: null }));
+    setState((was) => (sameInstrument ? { ...was, loading: true, error: null, note: null } : { candles: [], forKey: "", loading: true, error: null, note: null }));
     const ask = (attempt: number) => {
-      candlesFor(id, interval, days)
+      candlesFor(id, source, days)
         .then((candles) => {
-          if (!cancelled) setState({ candles, loading: false, error: null, note: null });
+          if (!cancelled) setState({ candles: mergeCandles(candles, merge), forKey: `${id}|${interval}`, loading: false, error: null, note: null });
         })
         .catch((e: unknown) => {
           if (cancelled) return;
@@ -118,7 +170,7 @@ export function useCandles(id: string, interval: string, days: number): CandleSt
     };
     // `shownId` is read, not watched: it only tells a new instrument from a new interval.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, interval, days]);
+  }, [id, interval]);
   return state;
 }
 

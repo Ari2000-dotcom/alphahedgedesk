@@ -68,7 +68,7 @@ body {
   font-size: var(--mh-size-control);
   font-weight: var(--mh-weight-regular);
   line-height: 1.25;
-  font-feature-settings: "tnum" 1, "cv11" 1;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -184,6 +184,7 @@ input {
   font-size: var(--mh-size-body);
   font-weight: var(--mh-weight-emphasis);
   white-space: nowrap;
+  transition: color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-nav-item:hover,
 .mh-nav-item[aria-current="page"] {
@@ -204,8 +205,11 @@ input {
 .mh-ticker {
   display: flex;
   align-items: center;
+  flex: 0 1 auto;
   gap: 20px;
+  min-width: 0;
   margin-right: 16px;
+  overflow: hidden;
   white-space: nowrap;
 }
 .mh-ticker-item {
@@ -229,17 +233,6 @@ input {
 }
 .mh-ticker-move.mh-down {
   color: var(--mh-down);
-}
-/* Narrow windows give up the indices first, SENSEX before the rest. */
-@media (max-width: 1180px) {
-  .mh-ticker-item:nth-child(3) {
-    display: none;
-  }
-}
-@media (max-width: 960px) {
-  .mh-ticker {
-    display: none;
-  }
 }
 
 /* The hub's state: a dot and a word, set off by a rule. */
@@ -315,7 +308,8 @@ input {
   height: 30px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  /* The rounded square every other icon button on the page has (the dock's, the chips'). */
+  border-radius: var(--mh-radius);
   background: transparent;
   color: var(--mh-text-tertiary);
   cursor: pointer;
@@ -326,9 +320,9 @@ input {
   background: var(--mh-surface-2);
   color: var(--mh-text-strong);
 }
-.mh-icon-btn.mh-small {
-  width: 22px;
-  height: 22px;
+.mh-icon-btn:active,
+.mh-picker:active {
+  background: var(--mh-surface-3);
 }
 
 /* -- the page: one container on the workspace ------------------------------- */
@@ -343,7 +337,6 @@ input {
    corner and its outline are the container's (theme/dock.css). */
 .mh-container {
   container-type: inline-size;
-  font-family: var(--mh-chart-font);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -351,25 +344,6 @@ input {
   min-width: 0;
   min-height: 0;
   background: var(--mh-bg);
-}
-
-/* A dashed frame (each chart legend's when asked for): a fine rule drawn as an SVG outline. */
-.mh-dash-frame {
-  position: absolute;
-  z-index: 6;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-.mh-dash-frame rect {
-  width: calc(100% - 1px);
-  height: calc(100% - 1px);
-  fill: none;
-  stroke: var(--mh-frame);
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
 }
 
 /* The header strip: one row, its rule under it, a crisp cast on the content. */
@@ -400,89 +374,6 @@ input {
   right: 0;
   height: 3px;
   background: var(--mh-strip-cast);
-  pointer-events: none;
-}
-
-/* -- the subject: the underlying's search, QuantDesk's symbol plate ---------- */
-
-.mh-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex: 0 1 230px;
-  min-width: 150px;
-  margin-right: 6px;
-}
-.mh-search > svg {
-  position: absolute;
-  left: 9px;
-  color: var(--mh-text-tertiary);
-  pointer-events: none;
-}
-.mh-search input {
-  width: 100%;
-  height: 27px;
-  padding: 0 28px 0 29px;
-  border: 1px solid var(--mh-line);
-  border-radius: var(--mh-radius-small);
-  background: var(--mh-well);
-  color: var(--mh-text-strong);
-  font-size: var(--mh-size-control);
-  outline: none;
-  transition: border-color var(--mh-dur-fast) var(--mh-ease);
-}
-.mh-search input:hover {
-  border-color: var(--mh-line-strong);
-}
-.mh-search input:focus {
-  border-color: var(--mh-focus);
-}
-.mh-search input::placeholder {
-  color: var(--mh-text-disabled);
-}
-/* With an underlying picked, the empty field names it, strong, as the strip's subject. */
-.mh-has-subject input:not(:focus)::placeholder {
-  color: var(--mh-text-strong);
-  font-weight: var(--mh-weight-emphasis);
-}
-/* The picked underlying: its name and the exchange as a badge, over the empty field. */
-.mh-subject {
-  position: absolute;
-  left: 29px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--mh-text-strong);
-  font-size: var(--mh-size-control);
-  pointer-events: none;
-}
-.mh-search input:focus ~ .mh-subject {
-  display: none;
-}
-.mh-subject .mh-chip {
-  height: 17px;
-  padding: 0 5px;
-  border: 1px solid var(--mh-line-strong);
-  background: transparent;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-}
-.mh-search .mh-icon-btn {
-  position: absolute;
-  right: 2px;
-}
-.mh-kbd {
-  position: absolute;
-  right: 5px;
-  display: grid;
-  place-items: center;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border: 1px solid var(--mh-line-strong);
-  border-radius: var(--mh-radius-small);
-  color: var(--mh-text-tertiary);
-  font: var(--mh-weight-regular) var(--mh-size-micro) / 1 var(--mh-font);
   pointer-events: none;
 }
 
@@ -731,13 +622,15 @@ input {
   height: 6px;
 }
 
-/* -- menus: search results and every dropdown -------------------------------- */
+/* -- menus: every dropdown, the layout and canvas pickers, a tab's menus -------------------- */
 
 /* -- menus, TradingView's way ------------------------------------------------------------------
    A plain panel: a small radius, a hairline edge and one soft shadow. Rows sit inset with rounded
    corners, an icon then the label; the row under the pointer is washed, and the pick of a
    pick-one menu is inverted (solid ink, ground-coloured text), which is how TradingView marks it.
-   Thin rules group the rows (`separator`), no headings. A pick-many menu has a checkbox per row. */
+   Thin rules group the rows (`separator`). A pick-many menu has a checkbox per row.
+   ui/Popover.tsx places the panel (fixed, at the page's top level, so no panel clips it) and caps
+   its height to the room it has; it is a column, so its list scrolls. */
 .mh-menu {
   margin: 0;
   padding: 6px;
@@ -747,14 +640,29 @@ input {
   background: var(--mh-surface-1);
   box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
 }
-.mh-results {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  left: 0;
-  width: max(100%, 360px);
-  max-height: 360px;
-  overflow: auto;
+.mh-pop {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: min(360px, calc(100vw - 16px));
+  animation: mh-pop var(--mh-dur-pop) var(--mh-ease-out);
+}
+.mh-pop[data-up] {
+  animation-name: mh-pop-up;
+}
+@keyframes mh-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+@keyframes mh-pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
 }
 .mh-menu-item {
   display: flex;
@@ -769,47 +677,9 @@ input {
   user-select: none;
 }
 .mh-menu-item:hover,
-.mh-results .mh-menu-item[aria-selected="true"],
 .mh-menu-item.mh-active {
   background: var(--mh-hover-wash);
   color: var(--mh-text-strong);
-}
-.mh-menu-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 10px;
-  color: var(--mh-text-tertiary);
-}
-.mh-result-name {
-  color: var(--mh-text-strong);
-  font-weight: var(--mh-weight-emphasis);
-}
-.mh-result-note {
-  color: var(--mh-text-tertiary);
-  font-size: var(--mh-size-caption);
-  white-space: nowrap;
-}
-
-.mh-pop {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: max(100%, 220px);
-  animation: mh-pop var(--mh-dur-pop) var(--mh-ease-out);
-}
-.mh-end > .mh-pop {
-  left: auto;
-  right: 0;
-}
-/* A quick fade in place: a menu is furniture, not an event. */
-@keyframes mh-pop {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
 }
 .mh-menu-rule {
   height: 1px;
@@ -818,7 +688,7 @@ input {
 }
 .mh-menu-heading,
 .mh-menu-group {
-  padding: 8px 10px 4px;
+  padding: 6px 12px 4px;
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-micro);
   font-weight: var(--mh-weight-regular);
@@ -827,19 +697,59 @@ input {
 }
 .mh-menu-group:not(:first-child) {
   margin-top: 4px;
+  padding-top: 8px;
   border-top: 1px solid var(--mh-line);
   padding-top: 8px;
 }
 .mh-menu-list {
-  max-height: 340px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(480px, calc(100dvh - 120px));
   margin: 0;
   padding: 0;
   list-style: none;
   overflow: auto;
+  overscroll-behavior: contain;
   outline: none;
 }
+/* A long list's search: a row of its own over the list, the field borderless inside it. */
+.mh-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 34px;
+  margin: -4px 0 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--mh-line);
+  color: var(--mh-text-tertiary);
+}
+.mh-menu-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
+}
+/* The row is the focus target and the caret shows it; no ring inside the menu. */
+.mh-menu-search input:focus-visible {
+  outline: none;
+}
+.mh-menu-search input::placeholder {
+  color: var(--mh-text-disabled);
+}
+.mh-menu-empty {
+  padding: 8px 12px;
+  color: var(--mh-text-tertiary);
+  font-size: var(--mh-size-caption);
+}
+/* One icon column, so every label in a menu starts on the same line whatever its icon's width. */
 .mh-menu-icon {
   display: inline-flex;
+  justify-content: center;
   flex: 0 0 auto;
   color: var(--mh-text-secondary);
 }
@@ -850,6 +760,9 @@ input {
 }
 .mh-menu-text {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* The pick of a pick-one menu, inverted: it reads at a glance, hovered or not. */
@@ -886,6 +799,94 @@ input {
 .mh-menu-item[aria-selected="true"] .mh-menu-check {
   border-color: var(--mh-dock-accent);
   background: var(--mh-dock-accent);
+}
+
+/* The current interval's tick (chart/IntervalPicker), in the row's own ink: inverted on the pick. */
+.mh-menu-tick {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  color: inherit;
+}
+
+/* -- the interval: favourites on the strip, every interval in a menu (chart/IntervalPicker) -- */
+
+.mh-intervals {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0 2px;
+}
+.mh-interval,
+.mh-interval-more {
+  display: inline-grid;
+  place-items: center;
+  height: 27px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-secondary);
+  font-size: var(--mh-size-control);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease);
+}
+.mh-interval-more {
+  padding: 0 5px;
+  color: var(--mh-text-tertiary);
+}
+.mh-interval:hover,
+.mh-interval-more:hover,
+.mh-interval-more[aria-expanded="true"] {
+  background: var(--mh-hover-wash);
+  color: var(--mh-text-strong);
+}
+/* The current interval: strongest ink on a plate, as a pressed key. */
+.mh-interval[aria-pressed="true"] {
+  background: var(--mh-surface-2);
+  color: var(--mh-text-strong);
+}
+.mh-interval:active,
+.mh-interval-more:active {
+  background: var(--mh-surface-3);
+}
+.mh-interval-more > svg {
+  transition: transform var(--mh-dur) var(--mh-ease-out);
+}
+.mh-interval-more[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+/* A narrow panel keeps the current interval and the menu, not the whole row of favourites. */
+@container (max-width: 560px) {
+  .mh-interval:not([aria-pressed="true"]) {
+    display: none;
+  }
+}
+/* A row's star: filled on a favourite, shown on an empty one only under the pointer or the keys. */
+.mh-star {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mh-radius-small);
+  background: transparent;
+  color: var(--mh-text-secondary);
+  cursor: pointer;
+}
+.mh-star[aria-pressed="false"] {
+  opacity: 0;
+}
+.mh-menu-item.mh-active .mh-star {
+  opacity: 1;
+}
+.mh-star:hover {
+  background: var(--mh-surface-3);
+  color: var(--mh-text-strong);
 }
 
 /* A canvas tone's swatch: its chrome over its container over its workspace,
@@ -935,8 +936,16 @@ input {
   font-size: var(--mh-size-body);
   font-weight: var(--mh-weight-emphasis);
 }
-.mh-readout-move {
+.mh-readout-move,
+.mh-readout-delta {
   color: var(--mh-text-tertiary);
+}
+/* A price's change in points before its bracketed percent, TradingView's "+12.50 (+0.05%)". */
+.mh-readout-delta.mh-up {
+  color: var(--mh-up);
+}
+.mh-readout-delta.mh-down {
+  color: var(--mh-down);
 }
 /* A readout or chip piece the measured fit has hidden (ui/fitRow.ts). */
 [data-drop][hidden] {
@@ -950,7 +959,7 @@ input {
   align-items: baseline;
   gap: 12px;
 }
-.mh-readgroup + .mh-readgroup::before {
+.mh-readgroup:not([hidden]) ~ .mh-readgroup:not([hidden])::before {
   content: "";
   align-self: center;
   width: 1px;
@@ -1032,10 +1041,12 @@ input {
 /* -- empty and loading ------------------------------------------------------- */
 
 .mh-empty {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  width: 100%;
   max-width: 420px;
   margin: auto;
   padding: 24px 16px;
@@ -1059,6 +1070,7 @@ input {
 .mh-empty-text {
   color: var(--mh-text-secondary);
   line-height: 1.5;
+  text-wrap: balance;
 }
 .mh-quick {
   display: flex;
@@ -1066,6 +1078,13 @@ input {
   justify-content: center;
   gap: 8px;
   margin-top: 10px;
+}
+/* Too narrow for the four in a row: two by two, never three and one left alone underneath. */
+@container (max-width: 340px) {
+  .mh-quick {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+  }
 }
 
 /* -- chart: openalgo-charts fills the container's body --------------------------- */
@@ -1123,8 +1142,9 @@ input {
 
 /* The strip stays one line however long the name or the prices: its readouts are measured and
    the least needed give way first (ui/fitRow.ts, `data-drop`), IV, then the straddle's average,
-   then the CE and PE legs; the ATM strike and the straddle always stay. A panel too narrow for even
-   those beside the pickers gives the readouts a line of their own, measured the same way. */
+   then the CE and PE legs. A panel too narrow for the rest beside the pickers gives the readouts a
+   line of their own, measured the same way; in the slimmest, the straddle's move and then the ATM
+   strike give way too, and the straddle itself always stays. */
 @container (max-width: 600px) {
   .mh-strip {
     flex-wrap: wrap;
@@ -1167,15 +1187,12 @@ input {
   .mh-brand {
     margin-right: 6px;
   }
-  .mh-nav {
+  /* A phone keeps the bar's marks (the logo, the layout's picture) and drops their words, so the
+     fullscreen and canvas buttons stay on screen. */
+  .mh-nav,
+  .mh-brand-name,
+  .mh-layout-name {
     display: none;
-  }
-  .mh-search {
-    flex: 1 1 100%;
-    margin-right: 0;
-  }
-  .mh-results {
-    width: 100%;
   }
   .mh-readouts {
     flex-wrap: wrap;
@@ -1200,11 +1217,4 @@ input {
 }
 .mh-header-add[data-open] {
   opacity: 1;
-}
-.mh-add-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 230px;
 }

@@ -343,13 +343,15 @@
   --mh-strip-cast: linear-gradient(to bottom, rgb(0 0 0 / 34%) 0 1px, rgb(0 0 0 / 18%) 1px 2px, rgb(0 0 0 / 7%) 2px 3px);
 
   /* -- type ------------------------------------------------------------ */
-  --mh-font: "Inter", "Segoe UI", system-ui, sans-serif;
-  /* The chart's face (TradingView's stack, vendor/openalgo-charts/src/render/font.ts), which a
-     chart's container sets its header in too, so strip, chips and chart read as one instrument. */
-  --mh-chart-font: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  /* One face for the whole page: the chart's (TradingView's stack, vendor/openalgo-charts/src/
+     render/font.ts), so the title bar, every panel's strip, the tables and the chart's own axes
+     read as one instrument. Its figures are tabular by default (Trebuchet MS on Windows). */
+  --mh-font: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   --mh-weight-regular: 400;
   /* No bold anywhere: emphasis is brightness, not weight. */
   --mh-weight-emphasis: 400;
+  /* An exchange badge ("NSE"): small caps-like, tracked out a little. */
+  --mh-size-badge: 10px;
   --mh-size-micro: 11px;
   --mh-size-caption: 12px;
   --mh-size-control: 13px;
@@ -357,7 +359,8 @@
   --mh-size-title: 15px;
   --mh-size-figure: 18px;
   --mh-size-display: 24px;
-  --mh-tracking-auto: calc(0.55px - 0.055em);
+  /* TradingView sets its face at its own spacing; the old negative tracking was Inter's. */
+  --mh-tracking-auto: normal;
 
   /* -- shape and size --------------------------------------------------- */
   --mh-radius-small: 4px;

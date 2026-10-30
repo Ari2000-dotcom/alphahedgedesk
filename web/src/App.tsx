@@ -5,7 +5,7 @@ import { applyCanvas, CANVAS_TONES, loadCanvas, type CanvasId } from "./core/can
 import { Hub, hubUrl, type HubStatus } from "./hub/client";
 import { Ticker } from "./shell/Ticker";
 import { UpdateToast } from "./shell/UpdateToast";
-import { addPanelOf, applyPreset, currentView, PANEL_KINDS, PRESETS, switchView, VIEWS, Workspace, type Preset, type View } from "./shell/Workspace";
+import { addPanelOf, applyPreset, currentView, PANEL_KINDS, PanelIcon, PRESETS, switchView, VIEWS, Workspace, type Preset, type View } from "./shell/Workspace";
 import { useFullscreen } from "./core/fullscreen";
 import { Dropdown } from "./ui/Dropdown";
 import { ChainIcon, ChartIcon, FullscreenEnterIcon, FullscreenExitIcon, PaletteIcon } from "./ui/icons";
@@ -47,13 +47,11 @@ export function App() {
   const dock = useRef<DockviewApi | null>(null);
   const [view, setView] = useState<View>(currentView);
   const [layout, setLayout] = useState<Preset | "custom">("custom");
-  const [panelCount, setPanelCount] = useState(2);
-  // Runs a change a menu makes, then counts the panels once the dock has settled.
+  const [panelCount, setPanelCount] = useState(0);
+  // Runs a change a menu makes on the dock.
   const lay = (fn: (api: DockviewApi) => void) => {
     const api = dock.current;
-    if (!api) return;
-    fn(api);
-    window.setTimeout(() => setPanelCount(api.panels.length), 400);
+    if (api) fn(api);
   };
   // A saved workspace: on the Workspace screen, its layout laid in place of this one.
   const loadWorkspace = (workspace: SavedWorkspace) => {
@@ -68,6 +66,17 @@ export function App() {
       }
     });
   };
+  // The Layout trigger's count follows the dock itself: a tab closed, a split or a restored screen.
+  const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
+  useEffect(() => {
+    if (!dockApi) return;
+    const count = () => setPanelCount(dockApi.panels.length);
+    count();
+    const subscriptions = [dockApi.onDidAddPanel(count), dockApi.onDidRemovePanel(count), dockApi.onDidLayoutFromJSON(count)];
+    return () => {
+      for (const each of subscriptions) each.dispose();
+    };
+  }, [dockApi]);
   useEffect(() => hub?.onStatus(setStatus), [hub]);
   const [fullscreen, toggleFullscreen] = useFullscreen();
 
@@ -132,9 +141,6 @@ export function App() {
               const kind = value.slice(4) as (typeof PANEL_KINDS)[number]["kind"];
               setLayout("custom");
               lay((api) => addPanelOf(api, kind, { referenceGroup: api.activeGroup ?? undefined, direction: "right" }));
-            } else if (value === "reset") {
-              setLayout("side");
-              lay((api) => applyPreset(api, "side"));
             }
           }}
           renderValue={() => {
@@ -142,14 +148,13 @@ export function App() {
             return (
               <span className="mh-layout-value">
                 <LayoutGlyph rects={spec?.rects ?? [[0, 0, 1, 1]]} />
-                {spec ? spec.short : `Custom · ${panelCount} ${panelCount === 1 ? "panel" : "panels"}`}
+                <span className="mh-layout-name">{spec ? spec.short : `Custom · ${panelCount} ${panelCount === 1 ? "panel" : "panels"}`}</span>
               </span>
             );
           }}
           options={[
             ...PRESETS.map((p) => ({ value: `preset:${p.id}`, label: p.name, group: "Layout", icon: <LayoutGlyph rects={p.rects} /> })),
-            ...PANEL_KINDS.map((k) => ({ value: `add:${k.kind}`, label: k.name, note: k.note, group: "Add a panel" })),
-            { value: "reset", label: "Reset layout", group: "Add a panel" },
+            ...PANEL_KINDS.map((k) => ({ value: `add:${k.kind}`, label: k.name, note: k.note, group: "Add a panel", icon: <PanelIcon kind={k.kind} /> })),
           ]}
         />
         <button
@@ -190,6 +195,7 @@ export function App() {
             themeKey={canvas}
             onApi={(api) => {
               dock.current = api;
+              setDockApi(api);
             }}
           />
         ) : null}

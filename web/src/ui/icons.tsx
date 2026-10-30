@@ -305,6 +305,15 @@ export const ChainIcon = ({ size }: P) => (
   </Icon>
 );
 
+/** A five-point star, filled when on: a favourite. */
+export function StarIcon({ size = 16, filled = false }: Readonly<{ size?: number; filled?: boolean }>) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden>
+      <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z" />
+    </svg>
+  );
+}
+
 export const TableIcon = ({ size }: P) => (
   <Icon size={size}>
     <rect x="3" y="4" width="18" height="16" rx="2" />

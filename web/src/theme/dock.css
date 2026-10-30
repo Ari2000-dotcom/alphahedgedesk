@@ -201,10 +201,16 @@
   background: transparent;
   color: var(--mh-text-secondary);
   cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease);
 }
-.mh-dock-btn:hover {
+.mh-dock-btn:hover:not(:disabled) {
   background: var(--mh-surface-2);
   color: var(--mh-text-strong);
+}
+.mh-dock-btn:active:not(:disabled),
+.mh-tab-caret:active,
+.mh-tab-close:active {
+  background: var(--mh-surface-3);
 }
 
 /* -- the splitter: the whole gap between two containers grabs it --------------------------- */
@@ -230,10 +236,11 @@
 
 /* -- a container arriving: it grows in, its tab a touch behind ------------------------------- */
 
+/* A fade only: a scale would resample the charts' canvases while they draw their first frames,
+   and a chart arriving squeezed and soft is what it looked like. */
 @keyframes mh-panel-in {
   from {
     opacity: 0;
-    transform: scale(0.97);
   }
 }
 @keyframes mh-tab-in {
@@ -254,18 +261,6 @@
   }
 }
 
-/* A preset's picture in the Layout menu: its grid of containers. */
-.mh-preset {
-  display: grid;
-  gap: 2px;
-  width: 26px;
-  height: 20px;
-}
-.mh-preset > span {
-  border: 1px solid var(--mh-text-tertiary);
-  border-radius: 2px;
-}
-
 /* The caret after a tab's title: change what the container shows. */
 .mh-tab-caret {
   display: inline-grid;
@@ -279,15 +274,11 @@
   background: transparent;
   color: var(--mh-text-tertiary);
   cursor: pointer;
+  transition: background-color var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-tab-caret:hover {
   background: var(--mh-surface-3);
   color: var(--mh-text-strong);
-}
-.mh-type-menu {
-  position: fixed;
-  z-index: 60;
-  min-width: 230px;
 }
 .mh-dock-btn:disabled {
   opacity: 0.35;

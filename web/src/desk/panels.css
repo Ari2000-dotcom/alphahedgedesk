@@ -11,23 +11,21 @@
   min-height: 0;
   background: var(--mh-bg);
 }
-.mh-table-tabs {
+/* The panel's strip: what it lists and how many, the strip height every other panel has, and the
+   12 px inset its cells use, so the title sits over the first column. */
+.mh-table-head {
   display: flex;
   align-items: center;
   flex: none;
-  height: 34px;
-  padding: 0 14px;
+  height: var(--mh-strip-h);
+  padding: 0 12px;
   border-bottom: 1px solid var(--mh-line);
 }
-.mh-table-tab {
-  height: 100%;
-  padding: 0;
-  border: 0;
-  border-bottom: 2px solid var(--mh-text-strong);
-  background: transparent;
+.mh-table-title {
   color: var(--mh-text-strong);
+  font-size: var(--mh-size-control);
 }
-.mh-table-tab span,
+.mh-table-title span,
 .mh-table-note {
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-caption);
@@ -43,9 +41,15 @@
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
+/* The option chain's header and rules (option/chain.css), so the two tables read as one family. */
 .mh-table th {
-  height: 28px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 30px;
   padding: 0 12px;
+  border-bottom: 1px solid var(--mh-line);
+  background: var(--mh-head);
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-caption);
   font-weight: var(--mh-weight-regular);
@@ -53,8 +57,9 @@
   white-space: nowrap;
 }
 .mh-table td {
-  height: 28px;
+  height: 32px;
   padding: 0 12px;
+  border-bottom: 1px solid var(--mh-line);
   color: var(--mh-text-secondary);
   text-align: right;
   white-space: nowrap;
@@ -62,15 +67,15 @@
 .mh-table .mh-l {
   text-align: left;
 }
-.mh-table tbody tr:first-child {
-  background: var(--mh-surface-1);
+.mh-table tbody tr:hover td {
+  background: var(--mh-hover-wash);
 }
 
 .mh-details {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px 14px 8px;
+  padding: 12px 12px 8px;
   overflow: auto;
   background: var(--mh-bg);
   font-variant-numeric: tabular-nums;
@@ -87,7 +92,7 @@
 }
 .mh-details-price > span:first-child {
   color: var(--mh-text-strong);
-  font-size: 24px;
+  font-size: var(--mh-size-display);
   line-height: 30px;
 }
 .mh-details-facts {
@@ -142,7 +147,7 @@
 }
 .mh-details-pick em {
   color: var(--mh-text-tertiary);
-  font-size: 11px;
+  font-size: var(--mh-size-micro);
   font-style: normal;
   line-height: 14px;
 }

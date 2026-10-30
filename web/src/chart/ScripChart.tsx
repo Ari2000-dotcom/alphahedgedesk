@@ -206,6 +206,8 @@ export function ScripChart({
       branding: false,
       navigation: { mousePan: "both" },
       axisChrome: { barCountdown: true },
+      // A panel that grows or shrinks keeps the same candles in view (the fork's option).
+      timeScale: { lockVisibleTimeRangeOnResize: true },
     });
     chartRef.current = chart;
     priceRef.current = chart.addSeries(chartType, {

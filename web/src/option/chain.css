@@ -16,11 +16,14 @@
  * its "+" (the compare), and each leg's IV when there is room.
  */
 
+/* Its own layout and paint island: the chain's two hundred rows are relaid and repainted only for
+   changes inside it, never for one elsewhere on the desk. */
 .mh-chain-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  contain: strict;
 }
 .mh-chain-table {
   width: 100%;
@@ -29,8 +32,8 @@
   table-layout: fixed;
   font-size: var(--mh-size-control);
 }
-.mh-col-iv {
-  width: 64px;
+.mh-col-ltp {
+  width: 96px;
 }
 .mh-col-strike {
   width: 100px;
@@ -47,6 +50,29 @@
 .mh-chain[data-narrow] .mh-col-straddle {
   width: 108px;
 }
+/* A slim panel: tighter insets and columns, and past even that the table scrolls sideways rather
+   than cutting a price short. */
+.mh-chain[data-compact] .mh-chain-table {
+  min-width: 300px;
+}
+.mh-chain[data-compact] .mh-col-strike {
+  width: 72px;
+}
+.mh-chain[data-compact] .mh-col-straddle {
+  width: 88px;
+}
+.mh-chain[data-compact] .mh-col-add {
+  width: 32px;
+}
+.mh-chain[data-compact] .mh-chain-table :is(th, td) {
+  padding: 0 8px;
+}
+.mh-chain[data-compact] .mh-chain-table td.mh-add {
+  padding: 0 4px;
+}
+.mh-chain[data-compact] .mh-chain-table td.mh-straddle > i {
+  margin-right: 6px;
+}
 
 .mh-chain-table th {
   position: sticky;
@@ -54,12 +80,15 @@
   z-index: 1;
   height: 30px;
   padding: 0 12px;
+  overflow: hidden;
   border-bottom: 1px solid var(--mh-line);
   background: var(--mh-head);
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-caption);
   font-weight: var(--mh-weight-regular);
   text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mh-chain-table th.mh-th-ce {
   text-align: right;
@@ -67,8 +96,9 @@
 .mh-chain-table th.mh-th-pe {
   text-align: left;
 }
+/* Cells stay unpositioned: a positioned cell is a paint layer of its own, and fifteen hundred of
+   them made every frame of a splitter drag slow to paint and composite. */
 .mh-chain-table td {
-  position: relative;
   height: 34px;
   padding: 0 12px;
   border-bottom: 1px solid var(--mh-line);
@@ -88,14 +118,27 @@
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-caption);
 }
+/* In the money: a neutral lift, never the down red (red means a fall, and half the table is not
+   falling). */
 .mh-chain-table td.mh-itm {
-  background: color-mix(in srgb, var(--mh-down) 7%, transparent);
+  background: color-mix(in srgb, var(--mh-text-strong) 4%, transparent);
 }
 .mh-chain-table tr:hover td.mh-itm {
-  background: color-mix(in srgb, var(--mh-down) 11%, transparent);
+  background: color-mix(in srgb, var(--mh-text-strong) 8%, transparent);
+}
+/* The spacer standing in for the rows not drawn (ChainPanel's `Gap`): no inset, rule or wash. */
+.mh-chain-table tr.mh-chain-gap td,
+.mh-chain-table tr.mh-chain-gap:hover td {
+  padding: 0;
+  border: 0;
+  background: none;
 }
 .mh-chain-table .mh-ltp {
   color: var(--mh-text-strong);
+}
+/* A price not in yet: a dash in the quietest ink, so a loading chain is not a wall of bright bars. */
+.mh-chain-table .mh-none {
+  color: var(--mh-text-disabled);
 }
 .mh-chain-table td.mh-strike {
   background: var(--mh-surface-1);
@@ -132,15 +175,29 @@
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1px solid var(--mh-line-strong);
+  border: 1px solid transparent;
   border-radius: var(--mh-radius-small);
   background: transparent;
-  color: var(--mh-text-tertiary);
+  color: var(--mh-text-disabled);
   cursor: pointer;
+  transition:
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    border-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease);
 }
-.mh-chain-pick:hover:not(:disabled) {
+/* A faint "+" on every row; its box only on the row under the pointer, so two hundred rows are
+   not two hundred outlined buttons. */
+.mh-chain-table tr:hover .mh-chain-pick:not(:disabled),
+.mh-chain-pick:focus-visible {
+  border-color: var(--mh-line-strong);
+  color: var(--mh-text-secondary);
+}
+.mh-chain-table tr:hover .mh-chain-pick:hover:not(:disabled) {
   background: var(--mh-surface-2);
   color: var(--mh-text-strong);
+}
+.mh-chain-pick:active:not(:disabled) {
+  background: var(--mh-surface-3);
 }
 .mh-chain-pick[aria-pressed="true"] {
   border-color: transparent;
@@ -186,8 +243,10 @@
   background: transparent;
   color: var(--mh-text-tertiary);
   cursor: pointer;
+  transition: color var(--mh-dur-fast) var(--mh-ease), background-color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-link-btn:hover:not(:disabled) {
+  background: var(--mh-surface-1);
   color: var(--mh-text-strong);
 }
 .mh-link-btn:disabled {

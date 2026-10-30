@@ -320,7 +320,8 @@ export function StraddlePage({
       key: summaryKey,
       name: pick.underlying.name,
       exchange: pick.underlying.id.split(":")[0]!.toUpperCase(),
-      expiry: dayLabel(pick.expiry),
+      expiry: pick.expiry,
+      expiryLabel: dayLabel(pick.expiry),
       lot: pick.underlying.lot,
       open: bars[0]!,
       last: bars[bars.length - 1]!,
@@ -431,14 +432,16 @@ export function StraddlePage({
                 (last ? (
                   <>
                     {/* In groups, a hairline between them: the ATM strike and its two legs, the
-                        straddle and its session average, then IV. Spot reads on the chips row. */}
-                    <span className="mh-readgroup">
+                        straddle and its session average, then IV. Spot reads on the chips row.
+                        In the slimmest panel the straddle's move and then the ATM strike give way
+                        too (the chips row names that strike), so the straddle itself always fits. */}
+                    <span className="mh-readgroup" data-drop={5}>
                       <Readout label="ATM" value={`${fmt0(last.strike)}${last.rolled ? " (rolled)" : ""}`} />
                       <Readout drop={3} badge side="call" label="CE" value={fmt2(last.call)} title={`${fmt0(last.strike)} call`} />
                       <Readout drop={3} badge side="put" label="PE" value={fmt2(last.put)} title={`${fmt0(last.strike)} put`} />
                     </span>
                     <span className="mh-readgroup">
-                      <Readout label="Straddle" value={fmt2(last.straddle)} change={first ? move(last.straddle, first.straddle) : null} />
+                      <Readout label="Straddle" value={fmt2(last.straddle)} change={first ? move(last.straddle, first.straddle) : null} changeDrop={4} />
                       <Readout drop={2} label="Avg" value={last.vwap != null ? fmt2(last.vwap) : "—"} title="The straddle's average price this session (its VWAP)" />
                     </span>
                     <span className="mh-readgroup" data-drop={1}>
@@ -489,38 +492,41 @@ export function StraddlePage({
             >
               <PlusIcon size={11} /> Add straddle <span>{1 + picks.length}/{MAX_STRADDLES}</span>
             </button>
-            <span className="mh-spacer" />
-            {(
-              [
-                ["vwap", "VWAP", "--mh-line-vwap", ""],
-                ["spot", "Spot", "--mh-line-spot", ""],
-                ["fut", "Syn fut", "--mh-line-fut", ""],
-              ] as [LineId, string, string, string][]
-            ).map(([id, label, colour, dash]) => {
-              const r = readingOf(id, shown, shownOpen);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className="mh-overlay"
-                  aria-pressed={!hiddenLines.has(id)}
-                  onClick={() => toggleLine(id)}
-                  onPointerEnter={() => setFocus(id)}
-                  onPointerLeave={() => setFocus(null)}
-                  onFocus={() => setFocus(id)}
-                  onBlur={() => setFocus(null)}
-                >
-                  <svg width="14" height="4" viewBox="0 0 14 4" aria-hidden>
-                    <path d="M0 2h14" stroke={`var(${colour})`} strokeWidth="2" strokeDasharray={dash} />
-                  </svg>
-                  {label}
-                  <span className="mh-overlay-value" style={{ color: `var(${colour})` }} data-drop={2}>
-                    {r.value}
-                  </span>
-                  <ChipMove move={r.move} drop={1} />
-                </button>
-              );
-            })}
+            {/* The line toggles as one group on the right: when the row runs out of room they move
+                to a line of their own together, never split one here and two there. */}
+            <span className="mh-overlays">
+              {(
+                [
+                  ["vwap", "VWAP", "--mh-line-vwap", ""],
+                  ["spot", "Spot", "--mh-line-spot", ""],
+                  ["fut", "Syn fut", "--mh-line-fut", ""],
+                ] as [LineId, string, string, string][]
+              ).map(([id, label, colour, dash]) => {
+                const r = readingOf(id, shown, shownOpen);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className="mh-overlay"
+                    aria-pressed={!hiddenLines.has(id)}
+                    onClick={() => toggleLine(id)}
+                    onPointerEnter={() => setFocus(id)}
+                    onPointerLeave={() => setFocus(null)}
+                    onFocus={() => setFocus(id)}
+                    onBlur={() => setFocus(null)}
+                  >
+                    <svg width="14" height="4" viewBox="0 0 14 4" aria-hidden>
+                      <path d="M0 2h14" stroke={`var(${colour})`} strokeWidth="2" strokeDasharray={dash} />
+                    </svg>
+                    {label}
+                    <span className="mh-overlay-value" style={{ color: `var(${colour})` }} data-drop={2}>
+                      {r.value}
+                    </span>
+                    <ChipMove move={r.move} drop={1} />
+                  </button>
+                );
+              })}
+            </span>
           </div>
         ) : null}
         <div className="mh-container-body">
@@ -640,12 +646,28 @@ function Readout({
   side,
   title,
   drop,
-}: Readonly<{ label: string; value: string; change?: { text: string; tone: Tone } | null; className?: string; badge?: boolean; side?: "call" | "put"; title?: string; drop?: number }>) {
+  changeDrop,
+}: Readonly<{
+  label: string;
+  value: string;
+  change?: { text: string; tone: Tone } | null;
+  className?: string;
+  badge?: boolean;
+  side?: "call" | "put";
+  title?: string;
+  drop?: number;
+  /** The move alone gives way at this rank, the value staying. */
+  changeDrop?: number;
+}>) {
   return (
     <span className={className ? `mh-readout ${className}` : "mh-readout"} title={title} data-drop={drop} data-side={side}>
       <span className={badge ? "mh-readout-label mh-readout-badge" : "mh-readout-label"}>{label}</span>
       <span className="mh-readout-value">{value}</span>
-      {change ? <span className={`mh-readout-move ${change.tone}`}>{change.text}</span> : null}
+      {change ? (
+        <span className={`mh-readout-move ${change.tone}`} data-drop={changeDrop}>
+          {change.text}
+        </span>
+      ) : null}
     </span>
   );
 }
