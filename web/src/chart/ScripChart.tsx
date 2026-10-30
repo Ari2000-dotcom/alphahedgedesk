@@ -76,6 +76,7 @@ export function ScripChart({
   colors,
   oiProfile,
   oiMode,
+  oiUnit = "oi",
   viewKey,
   themeKey,
 }: Readonly<{
@@ -94,6 +95,8 @@ export function ScripChart({
   /** Null hides the profile. */
   oiProfile: OiProfileData | null;
   oiMode: OiProfileMode;
+  /** What the bars measure: open interest, or delta x open interest (the tooltip says which). */
+  oiUnit?: "oi" | "delta";
   viewKey: string;
   themeKey: string;
 }>) {
@@ -370,7 +373,7 @@ export function ScripChart({
   return (
     <div className="oa-chart-frame" ref={frame}>
       <div ref={host} className="oa-chart" aria-label="Price chart with indicators" />
-      {tip ? <OiTip {...tip} colors={colors} /> : null}
+      {tip ? <OiTip {...tip} colors={colors} unit={oiUnit} /> : null}
     </div>
   );
 }
@@ -379,7 +382,7 @@ const signed = (v: number) => (Number.isFinite(v) ? `${v > 0 ? "+" : v < 0 ? "�
 const whole = (v: number) => (Number.isFinite(v) ? fmt0(v) : "—");
 
 /** One strike's open interest, beside the pointer: call and put, each with today's change. */
-function OiTip({ x, y, level, colors }: Readonly<{ x: number; y: number; level: OiBarLevel; colors: { up: string; down: string } }>) {
+function OiTip({ x, y, level, colors, unit }: Readonly<{ x: number; y: number; level: OiBarLevel; colors: { up: string; down: string }; unit: "oi" | "delta" }>) {
   return (
     // Left of the pointer: the bars hang off the right axis, so there is always room that side.
     <div className="mh-oi-tip" style={{ right: `calc(100% - ${x - 12}px)`, top: y }} role="tooltip">
@@ -388,20 +391,20 @@ function OiTip({ x, y, level, colors }: Readonly<{ x: number; y: number; level: 
         <thead>
           <tr>
             <th />
-            <th>OI</th>
-            <th>Chg</th>
+            <th>{unit === "delta" ? "Δ×OI" : "OI"}</th>
+            {unit === "oi" ? <th>Chg</th> : null}
           </tr>
         </thead>
         <tbody>
           <tr>
             <th style={{ color: colors.up }}>Call</th>
             <td>{whole(level.call)}</td>
-            <td>{signed(level.callChange)}</td>
+            {unit === "oi" ? <td>{signed(level.callChange)}</td> : null}
           </tr>
           <tr>
             <th style={{ color: colors.down }}>Put</th>
             <td>{whole(level.put)}</td>
-            <td>{signed(level.putChange)}</td>
+            {unit === "oi" ? <td>{signed(level.putChange)}</td> : null}
           </tr>
         </tbody>
       </table>

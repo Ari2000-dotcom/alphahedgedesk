@@ -563,6 +563,7 @@ input {
   color: var(--mh-text-tertiary);
   font-size: var(--mh-size-caption);
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .mh-oi-view {
   display: inline-flex;

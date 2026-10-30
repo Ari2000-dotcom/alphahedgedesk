@@ -25,10 +25,12 @@ import {
   OiTotalIcon,
   Spinner,
   StepLineIcon,
+  DeltaOiIcon,
 } from "../ui/icons";
 import { MultiDropdown } from "../ui/MultiDropdown";
 import { ATR_PERIOD, atrPoints, CANDLE_INTERVALS, useCandles } from "./useCandles";
-import { useOiProfile, type OiProfileMode } from "./useOiProfile";
+import { DEFAULT_BAND, useDeltaOi } from "../greeks/useDeltaOi";
+import { useOiProfile, type OiProfileData, type OiProfileMode } from "./useOiProfile";
 import { ScripChart, type LiveTick } from "./ScripChart";
 import { CANDLE_PALETTES, paletteColors, useCandlePalette } from "./candlePalette";
 import { CHART_TYPES, isLineType, useChartType, type ScripChartType } from "./chartType";
@@ -43,7 +45,7 @@ import { INDICATORS, useIndicators } from "./indicators";
 
 const QUICK = ["NIFTY", "BANKNIFTY", "SENSEX", "CRUDEOIL"];
 const DEFAULT_INTERVAL = "1d";
-type OiView = OiProfileMode | "off";
+type OiView = OiProfileMode | "delta" | "off";
 const OI_VIEWS: readonly {
   value: OiView;
   label: string;
@@ -52,6 +54,7 @@ const OI_VIEWS: readonly {
   { value: "both", label: "Total OI with today's change", Icon: OiBothIcon },
   { value: "oi", label: "Total OI", Icon: OiTotalIcon },
   { value: "change", label: "Today's OI change", Icon: OiChangeIcon },
+  { value: "delta", label: "Delta × OI: each strike's OI weighted by its delta (strikes around the money)", Icon: DeltaOiIcon },
   { value: "off", label: "Hide the OI profile", Icon: EyeOffIcon },
 ];
 
@@ -108,7 +111,23 @@ export function ScripPage({
   }, [id, allExpiriesKey]);
   const pickedExpiries = expiries.filter((e) => allExpiries.includes(e));
   // Hidden asks the hub for nothing: no expiries, no profile.
-  const { data: oiProfile } = useOiProfile(hub, id, oiView === "off" ? [] : pickedExpiries);
+  const { data: oiProfile } = useOiProfile(hub, id, oiView === "off" || oiView === "delta" ? [] : pickedExpiries);
+
+  // Delta × OI: the same bars, each strike's OI weighted by its delta. Only while that view is up,
+  // since it holds a band of live legs open.
+  const deltaOn = oiView === "delta";
+  const doi = useDeltaOi(hub, deltaOn ? id : "", deltaOn ? (pickedExpiries[0] ?? "") : "", DEFAULT_BAND);
+  const deltaProfile = useMemo<OiProfileData | null>(() => {
+    if (!deltaOn || doi.rows.length === 0) return null;
+    const read = (v: number | null) => (v === null ? Number.NaN : Math.abs(v));
+    return {
+      strikes: doi.rows.map((r) => r.strike),
+      call: doi.rows.map((r) => read(r.callDeltaOi)),
+      put: doi.rows.map((r) => read(r.putDeltaOi)),
+      callChange: doi.rows.map(() => Number.NaN),
+      putChange: doi.rows.map(() => Number.NaN),
+    };
+  }, [deltaOn, doi.rows]);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
   const { candles, loading, error, note } = useCandles(id, spec.value, spec.days);
@@ -265,6 +284,9 @@ export function ScripPage({
                     <Icon size={16} />
                   </button>
                 ))}
+                {deltaOn ? (
+                  <span className="mh-oi-caption">{doi.ready ? `Δ×OI · ±${DEFAULT_BAND} strikes` : doi.error || doi.waiting}</span>
+                ) : null}
               </div>
             </>
           ) : null}
@@ -302,8 +324,9 @@ export function ScripPage({
               stepSec={spec.seconds}
               name={underlyingOf.get(id)?.name ?? id}
               colors={colors}
-              oiProfile={oiView === "off" ? null : oiProfile}
-              oiMode={oiView === "off" ? "both" : oiView}
+              oiProfile={oiView === "off" ? null : deltaOn ? deltaProfile : oiProfile}
+              oiMode={oiView === "off" ? "both" : deltaOn ? "oi" : oiView}
+              oiUnit={deltaOn ? "delta" : "oi"}
               viewKey={viewKey}
               themeKey={themeKey}
             />

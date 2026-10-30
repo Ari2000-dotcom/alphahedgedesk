@@ -266,6 +266,16 @@ export const OiChangeIcon = ({ size }: P) => (
   </BarsIcon>
 );
 
+/** Delta x OI: bars scaled by delta, the calls' full and the puts' reaching less, with a delta mark. */
+export const DeltaOiIcon = ({ size }: P) => (
+  <BarsIcon size={size}>
+    <rect x="9" y="4" width="11" height="3" rx="1" />
+    <rect x="13" y="8.5" width="7" height="3" rx="1" opacity="0.55" />
+    <path d="M3.5 21 8 12.5 12.5 21z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <rect x="11" y="14.5" width="9" height="3" rx="1" opacity="0.55" />
+  </BarsIcon>
+);
+
 export function Spinner({ size = 16 }: P) {
   return (
     <svg className="mh-spin" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
