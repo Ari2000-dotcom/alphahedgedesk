@@ -594,27 +594,30 @@ input {
   outline-offset: 1px;
 }
 
-/* One strike's OI beside the pointer, shown only while it is over that strike's bars. */
+/* One strike's figures beside the pointer, shown only while it is over that strike's bars. The
+   text is centred with the same room either side, and each side's figures take that side's colour
+   (calls and puts as they are drawn), a move its green or red, a quiet label its quiet ink. */
 .mh-oi-tip {
   position: absolute;
   z-index: 5;
   transform: translateY(-50%);
-  padding: 6px 8px;
+  padding: 10px 18px;
   border: 1px solid var(--mh-line-strong);
   border-radius: var(--mh-radius-small);
   background: var(--mh-surface-2);
   color: var(--mh-text-strong);
   font-size: var(--mh-size-caption);
   font-variant-numeric: tabular-nums;
+  text-align: center;
   pointer-events: none;
   white-space: nowrap;
 }
 .mh-oi-tip-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 4px;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 6px;
   font-weight: var(--mh-weight-emphasis);
 }
 .mh-oi-tip-head span {
@@ -622,9 +625,22 @@ input {
   font-size: var(--mh-size-micro);
   font-weight: var(--mh-weight-regular);
 }
+.mh-oi-tip table {
+  margin: 0 auto;
+  border-collapse: collapse;
+}
+.mh-oi-tip th,
+.mh-oi-tip td {
+  padding: 2px 10px;
+  text-align: center;
+  font-weight: var(--mh-weight-regular);
+}
+.mh-oi-tip thead th {
+  color: var(--mh-text-tertiary);
+}
 .mh-oi-tip tfoot th,
 .mh-oi-tip tfoot td {
-  padding-top: 4px;
+  padding-top: 5px;
   border-top: 1px solid var(--mh-line);
   color: var(--mh-text-secondary);
 }
@@ -636,22 +652,6 @@ input {
 }
 .mh-oi-flat {
   color: var(--mh-text-disabled);
-}
-.mh-oi-tip table {
-  border-collapse: collapse;
-}
-.mh-oi-tip th,
-.mh-oi-tip td {
-  padding: 1px 0 1px 12px;
-  text-align: right;
-  font-weight: var(--mh-weight-regular);
-}
-.mh-oi-tip th:first-child {
-  padding-left: 0;
-  text-align: left;
-}
-.mh-oi-tip thead th {
-  color: var(--mh-text-tertiary);
 }
 
 /* -- a strip picker: flat, caption then value, a wash on hover --------------- */

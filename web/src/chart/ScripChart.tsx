@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createChart, type Bar as OaBar, type Chart, type SeriesApi } from "openalgo-charts";
 
 import { fmt0, fmt2, istDate } from "../core/format";
@@ -448,11 +448,20 @@ function OiTip({ x, y, level, colors, unit, mode }: Readonly<{ x: number; y: num
   const fmt = delta ? compact : whole;
   const fmtMove = delta ? compactSigned : signed;
   const showMove = mode !== "oi";
+  const box = useRef<HTMLDivElement>(null);
+  // Kept whole inside the chart: near the top or bottom edge the box slides in rather than being cut.
+  useLayoutEffect(() => {
+    const el = box.current;
+    const frame = el?.parentElement;
+    if (!el || !frame) return;
+    const half = el.offsetHeight / 2;
+    el.style.top = `${Math.min(Math.max(y, half + 4), Math.max(half + 4, frame.clientHeight - half - 4))}px`;
+  });
   const net = level.call - level.put;
   const pcr = level.call > 0 ? level.put / level.call : Number.NaN;
   return (
     // Left of the pointer: the bars hang off the right axis, so there is always room that side.
-    <div className="mh-oi-tip" style={{ right: `calc(100% - ${x - 12}px)`, top: y }} role="tooltip">
+    <div ref={box} className="mh-oi-tip" style={{ right: `calc(100% - ${x - 12}px)`, top: y }} role="tooltip">
       <div className="mh-oi-tip-head">
         {fmt2(level.price)}
         <span>{delta ? "Delta × OI" : "Open interest"}</span>
@@ -466,8 +475,8 @@ function OiTip({ x, y, level, colors, unit, mode }: Readonly<{ x: number; y: num
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <th style={{ color: colors.up }}>Call</th>
+          <tr style={{ color: colors.up }}>
+            <th>Call</th>
             <td>{fmt(level.call)}</td>
             {showMove ? (
               <td>
@@ -475,8 +484,8 @@ function OiTip({ x, y, level, colors, unit, mode }: Readonly<{ x: number; y: num
               </td>
             ) : null}
           </tr>
-          <tr>
-            <th style={{ color: colors.down }}>Put</th>
+          <tr style={{ color: colors.down }}>
+            <th>Put</th>
             <td>{fmt(level.put)}</td>
             {showMove ? (
               <td>
