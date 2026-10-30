@@ -6,6 +6,7 @@ import { useChartPixelSnap } from "../chart/useChartPixelSnap";
 import { fmt0, fmt2 } from "../core/format";
 import type { Bar } from "../hub/types";
 import { Spinner } from "../ui/icons";
+import { PaneGrip } from "../chart/PaneGrip";
 import { LivePulse, type PulseDot } from "./LivePulse";
 import type { StrikeLine } from "./useStrikeLines";
 
@@ -365,6 +366,7 @@ export function StraddleChart({
     }
     chart.setPaneWeight(0, 2);
     chart.setPaneWeight(1, 1);
+    chart.addPrimitive(new PaneGrip(), 1);
 
     // The live end of the premium line: a dot with rings drizzling out of it, on today's session only.
     chart.addPrimitive(

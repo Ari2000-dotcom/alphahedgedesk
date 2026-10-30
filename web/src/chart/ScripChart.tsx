@@ -7,6 +7,7 @@ import { isLineType, type ScripChartType } from "./chartType";
 import { ATR_PERIOD, atrPoints } from "./useCandles";
 import { INDICATORS, sessionAverage, type IndicatorId } from "./indicators";
 import { OiProfileBars, type OiBarLevel } from "./OiProfileBars";
+import { PaneGrip } from "./PaneGrip";
 import type { OiProfileData, OiProfileMode } from "./useOiProfile";
 import { useChartPixelSnap } from "./useChartPixelSnap";
 
@@ -371,6 +372,7 @@ export function ScripChart({
         // The pane says what it is: the indicator's name at its top left, with its reading.
         const legend = new PaneLegend({ id: def.id, title: def.name, color: lineColor(def.color), row: 0, font: 12 });
         chart.addPrimitive(legend, paneIndex);
+        chart.addPrimitive(new PaneGrip(), paneIndex);
         legendRef.current.set(def.id, legend);
       }
       linesRef.current.set(def.id, series);
