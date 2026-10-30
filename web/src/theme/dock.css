@@ -6,7 +6,7 @@
  * the gutter shows past the tabs.
  *
  * The focused container is the one with the blue frame: its plate and its active tab are edged in
- * the dock's interaction blue (`--mh-dock-accent`, also the splitter's and a drop target's), the
+ * the dock's interaction blue (`--mh-dock-accent`, also a drop target's), the
  * rest stay frameless, so which one takes the keys is plain at a glance.
  */
 
@@ -27,7 +27,7 @@
   --dv-separator-border: transparent;
   --dv-drag-over-background-color: color-mix(in srgb, var(--mh-dock-accent) 18%, transparent);
   --dv-drag-over-border-color: var(--mh-dock-accent);
-  --dv-active-sash-color: var(--mh-dock-accent);
+  --dv-active-sash-color: transparent;
   --dv-active-sash-transition-delay: 120ms;
   --dv-active-sash-transition-duration: var(--mh-dur-fast);
   --dv-icon-hover-background-color: var(--mh-surface-2);
@@ -215,10 +215,10 @@
 .mh-dock .dv-vertical > .dv-sash-container > .dv-sash::before {
   inset: calc(-1 * var(--mh-dock-gutter)) 0;
 }
+/* Resizing shows no line: the divider stays invisible under the pointer, the cursor says where it is. */
 .mh-dock .dv-split-view-container .dv-sash-container .dv-sash.dv-enabled:hover,
 .mh-dock .dv-split-view-container .dv-sash-container .dv-sash.dv-enabled:active {
-  background-color: var(--mh-dock-accent);
-  transition: background-color var(--mh-dur-fast) var(--mh-ease) 120ms;
+  background-color: transparent;
 }
 
 /* -- a container arriving: it grows in, its tab a touch behind ------------------------------- */
