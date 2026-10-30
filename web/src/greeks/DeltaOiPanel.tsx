@@ -78,7 +78,7 @@ export function DeltaOiPanel({
   const body = !pick ? (
     <div className="mh-empty">
       <div className="mh-empty-title">Pick an underlying</div>
-      <div className="mh-empty-text">Its calls' and puts' delta times open interest, strike by strike.</div>
+      <div className="mh-empty-text">Call and put delta × OI at every strike.</div>
       <QuickPicks hub={hub} onPick={setPick} disabled={!connected} />
     </div>
   ) : doi.error ? (
@@ -157,7 +157,7 @@ export function DeltaOiPanel({
         {doi.limited ? (
           <>
             <span className="mh-doi-dot">·</span>
-            <span className="mh-doi-limit" title="The hub lets each visitor hold only so many live prices, and an option chain in this tab takes most of them. Raising max_topics in its config.toml widens the band.">
+            <span className="mh-doi-limit" title="Live prices are limited per visitor, and an option chain in this tab is using most of them, so fewer strikes here update live.">
               Band trimmed: hub limit
             </span>
           </>

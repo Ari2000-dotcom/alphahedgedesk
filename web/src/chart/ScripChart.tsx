@@ -205,7 +205,8 @@ export function ScripChart({
       crosshairSnapToBar: true,
       branding: false,
       navigation: { mousePan: "both" },
-      axisChrome: { barCountdown: true },
+      // The bar countdown only while trades come in: on a closed market it would count to nothing.
+      axisChrome: { barCountdown: false },
       // A panel that grows or shrinks keeps the same candles in view (the fork's option).
       timeScale: { lockVisibleTimeRangeOnResize: true },
     });
@@ -406,6 +407,10 @@ export function ScripChart({
     if (tick) apply(tick);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
+  const trading = tick !== null;
+  useEffect(() => {
+    chartRef.current?.setAxisChromeOptions({ barCountdown: trading });
+  }, [trading]);
 
   /* -- ATP: today's average traded price as a level across the chart, with its name box ("ATP")
    *    and value tag on the axis like every other line. The exchange's figure when the quote

@@ -123,7 +123,7 @@ export function App() {
         </nav>
         <span className="mh-spacer" />
         {hub ? <Ticker hub={hub} /> : null}
-        <span className="mh-feed" title="Connection to the hub">
+        <span className="mh-feed" title="Connection to the market data feed">
           <span className={`mh-dot ${STATUS_TONE[status]}`} />
           {STATUS_TEXT[status]}
         </span>

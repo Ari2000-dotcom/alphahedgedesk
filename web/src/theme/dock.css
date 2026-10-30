@@ -6,7 +6,7 @@
  * the gutter shows past the tabs.
  *
  * The focused container is the one with the blue frame: its plate and its active tab are edged in
- * the dock's interaction blue (`--mh-dock-accent`, also a drop target's), the
+ * the accent blue (`--mh-dock-accent`, also a drop target's), the
  * rest stay frameless, so which one takes the keys is plain at a glance.
  */
 

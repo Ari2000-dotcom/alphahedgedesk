@@ -156,7 +156,7 @@ export function useCandles(id: string, spec: CandleInterval): CandleState {
         .catch((e: unknown) => {
           if (cancelled) return;
           if (e instanceof Throttled && attempt < RETRY_MS.length) {
-            setState((was) => ({ ...was, note: "Waiting for the hub's history allowance" }));
+            setState((was) => ({ ...was, note: "Waiting for the history limit to reset" }));
             timer = window.setTimeout(() => ask(attempt + 1), RETRY_MS[attempt]);
             return;
           }

@@ -106,6 +106,10 @@ export function StraddlePage({
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [resync, setResync] = useState(0);
+  // Today with nothing traded yet (a weekend, a holiday, before the open): the last session shown
+  // in its place, named, until today's first minute replaces it.
+  const [liveEmpty, setLiveEmpty] = useState(false);
+  const [closedDay, setClosedDay] = useState("");
   const universe = useUniverse(hub);
   const underlyingOf = useMemo(() => new Map(universe.map((u) => [u.id, u] as const)), [universe]);
   // The underlying on the chart is always on the list, so the picker names it ("NIFTY NSE") rather
@@ -153,6 +157,8 @@ export function StraddlePage({
     setBars([]);
     setError("");
     setNote("Connecting…");
+    setLiveEmpty(false);
+    setClosedDay("");
     let current: Bar[] = [];
     const flush = () => {
       frame.current = null;
@@ -170,6 +176,15 @@ export function StraddlePage({
       if (msg.t === "straddle_snapshot") {
         const snap = msg as StraddleSnapshot;
         current = snap.bars.slice();
+        if (current.length === 0 && snap.backfill !== "loading") {
+          // Nothing today. A repeat of this snapshot (another chart joining the topic) must not
+          // wipe the last session already shown in its place.
+          setLiveEmpty(true);
+          setNote("");
+          return;
+        }
+        setLiveEmpty(false);
+        setClosedDay("");
         setNote(
           snap.backfill === "loading"
             ? "Loading today from the open…"
@@ -188,6 +203,8 @@ export function StraddlePage({
         }
         if (u.prev) upsert(current, u.prev);
         upsert(current, u.bar);
+        setLiveEmpty(false);
+        setClosedDay("");
         schedule();
       } else if (msg.t === "err") {
         setError(String((msg as { error: string }).error));
@@ -201,6 +218,35 @@ export function StraddlePage({
       pending.current = null;
     };
   }, [hub, topic, live, resync]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* -- today empty: the latest session before it, newest first, skipping days the hub has none for */
+  useEffect(() => {
+    if (!pick || !live || !liveEmpty) return;
+    let cancelled = false;
+    void (async () => {
+      for (const day of pastWeekdays(PAST_DAYS).filter((d) => d <= pick.expiry)) {
+        const q = new URLSearchParams({ underlying: pick.underlying.id, expiry: pick.expiry, date: day });
+        try {
+          const res = await fetch(`/straddle_history?${q}`);
+          if (cancelled) return;
+          if (!res.ok) continue;
+          const got = ((await res.json()) as { bars: Bar[] }).bars;
+          if (cancelled) return;
+          if (got.length === 0) continue;
+          tried.current.add(day);
+          setClosedDay(day);
+          setNote("");
+          setBars(got);
+          return;
+        } catch {
+          return;
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pick, live, liveEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* -- a past day: one plain HTTP request, so the browser keeps the answer (a past day never
      changes) and reopening it doesn't reach the hub at all --------------------------------------- */
@@ -220,7 +266,7 @@ export function StraddlePage({
         return (await res.json()) as { bars: Bar[] };
       })
       .then((r) => !cancelled && setBars(r.bars))
-      .catch((e: Error) => !cancelled && setError(e.name === "AbortError" ? "the hub took too long; try again" : e.message))
+      .catch((e: Error) => !cancelled && setError(e.name === "AbortError" ? "The server took too long. Try again." : e.message))
       .finally(() => {
         clearTimeout(timer);
         if (!cancelled) setLoading(false);
@@ -256,7 +302,7 @@ export function StraddlePage({
 
   const loadOlder = useCallback(async () => {
     if (!pick || paging.current || bars.length === 0) return;
-    const before = pick.day === "live" ? istDate(Date.now()) : pick.day;
+    const before = pick.day === "live" ? closedDay || istDate(Date.now()) : pick.day;
     const candidates = pastWeekdays(PAST_DAYS).filter((d) => d < before && d <= pick.expiry && !tried.current.has(d));
     if (candidates.length === 0) {
       setHistory("exhausted");
@@ -291,7 +337,7 @@ export function StraddlePage({
     }
     paging.current = false;
     setHistory("exhausted");
-  }, [pick, bars.length]);
+  }, [pick, bars.length, closedDay]);
 
   // The chart's minutes: earlier sessions in front of the one picked (its time axis marks each day).
   const chartBars = useMemo(() => (older.length > 0 ? [...older.flatMap((o) => o.bars), ...bars] : bars), [older, bars]);
@@ -315,7 +361,7 @@ export function StraddlePage({
   // What this chart knows, for the table and details panels (they add no topics of their own).
   const summaryKey = pick ? `${pick.underlying.id}|${pick.expiry}` : "";
   useEffect(() => {
-    if (!pick || pick.day !== "live" || bars.length === 0) return;
+    if (!pick || pick.day !== "live" || closedDay || bars.length === 0) return;
     publishSummary({
       key: summaryKey,
       name: pick.underlying.name,
@@ -328,12 +374,12 @@ export function StraddlePage({
       live: true,
       at: Date.now(),
     });
-  }, [bars, pick, summaryKey]);
+  }, [bars, pick, summaryKey, closedDay]);
   useEffect(() => () => dropSummary(summaryKey), [summaryKey]);
 
   const compare = useCompare();
   const picks = pick ? picksFor(compare, pick.underlying.id, pick.expiry) : [];
-  const strikeLines = useStrikeLines(hub, pick?.underlying.id ?? "", pick?.expiry ?? "", pick?.day ?? "live", bars, picks);
+  const strikeLines = useStrikeLines(hub, pick?.underlying.id ?? "", pick?.expiry ?? "", closedDay || (pick?.day ?? "live"), bars, picks);
   const hiddenLines = useHidden();
   const first = bars[0];
   const last = bars[bars.length - 1];
@@ -360,6 +406,8 @@ export function StraddlePage({
       <Spinner size={13} />
       Loading {pick ? dayLabel(pick.day) : ""}
     </span>
+  ) : closedDay ? (
+    <span className="mh-hint">Market closed · {dayLabel(closedDay)}</span>
   ) : note ? (
     <span className="mh-hint mh-warn">
       {note.endsWith("…") ? <Spinner size={13} /> : <AlertIcon size={14} />}
@@ -386,7 +434,7 @@ export function StraddlePage({
             renderValue={(o) =>
               o ? (
                 <>
-                  {o.label} <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
+                  <span className="mh-symbol">{o.label}</span> <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
                 </>
               ) : (
                 "Pick an underlying"
@@ -532,7 +580,7 @@ export function StraddlePage({
         <div className="mh-container-body">
           {pick && bars.length > 0 ? (
             <StraddleChart
-              live={live}
+              live={live && !closedDay}
               showVix={!pick.underlying.id.startsWith("mcx:")}
               bars={chartBars}
               viewKey={viewKey}
@@ -573,7 +621,7 @@ export function StraddlePage({
                 <ChartIcon size={28} />
               </span>
               <div className="mh-empty-title">Pick an underlying</div>
-              <div className="mh-empty-text">Spot, synthetic future, the ATM straddle with its VWAP, ATM IV and India VIX, minute by minute.</div>
+              <div className="mh-empty-text">The ATM straddle with its VWAP, spot, synthetic future, ATM IV and India VIX, by the minute.</div>
               <div className="mh-quick">
                 {QUICK.map((name) => (
                   <button key={name} type="button" className="mh-btn" disabled={universe.length === 0} onClick={() => quickPick(name)}>

@@ -154,7 +154,8 @@ export function ScripPage({
   const deltaProfile = useExposureTrend(deltaRows, deltaOn, deltaKey);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
-  const { candles, forKey, loading, error, note } = useCandles(id, spec);
+  const priceId = usePriceId(hub, id, allExpiries);
+  const { candles, forKey, loading, error, note } = useCandles(priceId, spec);
   const atr = useMemo(() => atrPoints(candles, ATR_PERIOD), [candles]);
   // The view follows the candles drawn, not the interval asked for: the old interval's candles stay
   // up while the new one loads, and the chart fits the new ones only when they are there.
@@ -169,18 +170,18 @@ export function ScripPage({
   // interval — a 5m chart's last two bars are minutes apart, not a day's move.
   const [prevClose, setPrevClose] = useState<number | null>(null);
   useEffect(() => {
-    if (!id) {
+    if (!priceId) {
       setPrevClose(null);
       return;
     }
     let cancelled = false;
-    previousClose(id)
+    previousClose(priceId)
       .then((p) => !cancelled && setPrevClose(p))
       .catch(() => !cancelled && setPrevClose(null));
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [priceId]);
 
   // Today's real last price, live, for the readout; and each live trade for the forming candle.
   // The hub's replay of the last known state (yesterday's, before the open) moves the readout but
@@ -193,8 +194,8 @@ export function ScripPage({
     setLive(null);
     setTick(null);
     setAtp(null);
-    if (!id) return;
-    return hub.subscribe(`quote:${id}`, (msg: TopicMessage) => {
+    if (!priceId) return;
+    return hub.subscribe(`quote:${priceId}`, (msg: TopicMessage) => {
       const q = msg as { ltp?: number; ts?: number; replay?: boolean; atp?: number };
       if (msg.t !== "q" || typeof q.ltp !== "number" || q.ltp <= 0) return;
       setLive(q.ltp);
@@ -202,7 +203,7 @@ export function ScripPage({
       if (!q.replay && typeof q.atp === "number" && q.atp > 0) setAtp(q.atp);
       if (!q.replay && typeof q.ts === "number") setTick({ price: q.ltp, ts: q.ts });
     });
-  }, [hub, id]);
+  }, [hub, priceId]);
 
   const [chartType, setChartType] = useChartType();
   const [paletteId, setPaletteId] = useCandlePalette();
@@ -231,7 +232,7 @@ export function ScripPage({
             renderValue={(o) =>
               o ? (
                 <>
-                  {o.label} <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
+                  <span className="mh-symbol">{o.label}</span> <span className="mh-chip">{o.value.split(":")[0]!.toUpperCase()}</span>
                 </>
               ) : (
                 "Pick an underlying"
@@ -397,7 +398,7 @@ export function ScripPage({
                 <ChartIcon size={28} />
               </span>
               <div className="mh-empty-title">Pick an underlying</div>
-              <div className="mh-empty-text">Candles with price on the right axis, and the indicators you pick.</div>
+              <div className="mh-empty-text">Candles, the OI profile and your indicators for any index or commodity.</div>
               <div className="mh-quick">
                 {QUICK.map((name) => (
                   <button key={name} type="button" className="mh-btn" disabled={universe.length === 0} onClick={() => quickPick(name)}>
@@ -440,4 +441,29 @@ const TYPE_ICONS: Record<ScripChartType, typeof CandlesIcon> = {
 function ChartTypeIcon({ type }: Readonly<{ type: ScripChartType }>) {
   const Icon = TYPE_ICONS[type];
   return <Icon size={18} />;
+}
+
+/**
+ * What the price candles are asked by. An index or a share has a spot price; an MCX commodity has
+ * none, and its price is its future, the one its options are written on. The hub names that future
+ * in a straddle's first message, so this reads it from there once and lets the topic go.
+ */
+function usePriceId(hub: Hub, id: string, expiries: readonly string[]): string {
+  const mcx = id.startsWith("mcx:");
+  const expiry = mcx ? nearestExpiry(expiries) : "";
+  const [future, setFuture] = useState<{ for: string; id: string } | null>(null);
+  useEffect(() => {
+    if (!mcx || !expiry) return;
+    let stop: (() => void) | null = null;
+    stop = hub.subscribe(`straddle:${id}:${expiry}`, (msg: TopicMessage) => {
+      const reference = (msg as { reference?: unknown }).reference;
+      if (msg.t !== "straddle_snapshot" || typeof reference !== "string" || !reference) return;
+      setFuture({ for: id, id: reference });
+      stop?.();
+      stop = null;
+    });
+    return () => stop?.();
+  }, [hub, id, mcx, expiry]);
+  if (!mcx) return id;
+  return future?.for === id ? future.id : "";
 }

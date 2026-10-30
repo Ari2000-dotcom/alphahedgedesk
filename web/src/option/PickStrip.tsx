@@ -113,7 +113,7 @@ export function PickStrip({
     }
     if (!connected) {
       setResults([]);
-      setNote("Not connected to the hub yet");
+      setNote("Connecting to the data feed…");
       return;
     }
     let cancelled = false;
@@ -182,7 +182,7 @@ export function PickStrip({
         />
         {pick && !query ? (
           <span className="mh-pick-subject" aria-hidden>
-            {pick.underlying.name} <span className="mh-chip">{exchange}</span>
+            <span className="mh-pick-subject-name">{pick.underlying.name}</span> <span className="mh-chip">{exchange}</span>
           </span>
         ) : null}
         {query ? (
@@ -227,7 +227,8 @@ export function PickStrip({
       <span className="mh-spacer" />
       {spot !== null && spot !== undefined ? (
         <span className="mh-pick-spot">
-          {pick?.underlying.name} <b>{fmt2(spot)}</b>
+          <span className="mh-pick-spot-name">{pick?.underlying.name} </span>
+          <b>{fmt2(spot)}</b>
         </span>
       ) : null}
       {children}

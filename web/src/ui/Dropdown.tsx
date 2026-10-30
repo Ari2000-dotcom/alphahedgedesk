@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ChevronDownIcon, SearchIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 import { filterOptions, SEARCH_FROM, useTypeahead } from "./menuSearch";
 import { Popover } from "./Popover";
 
@@ -24,7 +24,7 @@ export interface DropdownOption<T extends string> {
  * it is an icon button instead (the canvas picker).
  *
  * The list floats over the page (`Popover`), never clipped by the panel it opens from: flat rows,
- * a wash under the pointer or the keys, the current pick in the interaction blue. A long list (an
+ * a wash under the pointer or the keys, the current pick a step lighter with a blue tick. A long list (an
  * underlying out of hundreds) opens with a search box; a short one jumps to what is typed.
  * ↑/↓, Home/End move; Enter or a click picks; Escape, Tab or a click outside closes.
  */
@@ -216,6 +216,9 @@ export function Dropdown<T extends string>({
                     {o.icon ? <span className="mh-menu-icon">{o.icon}</span> : null}
                     <span className="mh-menu-text">{o.label}</span>
                     {o.note ? <span className="mh-menu-note">{o.note}</span> : null}
+                    <span className="mh-menu-tick" aria-hidden>
+                      {o.value === value ? <CheckIcon size={14} /> : null}
+                    </span>
                   </li>
                 </Fragment>
               ))

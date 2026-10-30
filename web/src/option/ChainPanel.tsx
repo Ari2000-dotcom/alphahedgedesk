@@ -130,7 +130,7 @@ export function ChainPanel({
       {!pick ? (
         <div className="mh-empty">
           <div className="mh-empty-title">Pick an underlying</div>
-          <div className="mh-empty-text">Its option chain, with the straddle at every strike.</div>
+          <div className="mh-empty-text">Calls, puts and the straddle at every strike.</div>
           <QuickPicks hub={hub} onPick={setPick} disabled={!connected} />
         </div>
       ) : chain.error ? (
@@ -205,7 +205,7 @@ export function ChainPanel({
               {count} of {MAX_STRADDLES} straddles on the chart
             </span>
             {chain.limited ? (
-              <span className="mh-chain-limit" title="The hub lets each visitor hold only so many live prices, so rows far from the view wait to be scrolled to. Raising max_topics in its config.toml keeps more of them live.">
+              <span className="mh-chain-limit" title="Live prices are limited per visitor, so rows far from view update once you scroll to them.">
                 Live prices near the view: hub limit
               </span>
             ) : null}

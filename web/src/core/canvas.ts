@@ -1,5 +1,5 @@
 /**
- * The page's canvas tone (AlphaHedge's idea): which ground everything sits on.
+ * The page's canvas tone: which ground everything sits on.
  *
  * The tones live in `theme/tokens.css` under `[data-canvas="…"]`; this file
  * carries only the list the picker shows and owns the `data-canvas` attribute
@@ -7,19 +7,13 @@
  * themselves and the same stylesheet paints them.
  */
 
-export type CanvasId = "tradingview" | "charcoal" | "openalgo" | "quantdesk" | "graphite" | "neutral" | "slate" | "ink" | "moss" | "plum";
+export type CanvasId = "neutral" | "tradingview" | "charcoal";
 
+// The ids are what a saved choice holds, so "tradingview" keeps its id under its new name.
 export const CANVAS_TONES: readonly { id: CanvasId; name: string; note: string }[] = [
-  { id: "tradingview", name: "TradingView", note: "Navy chart, black frame" },
-  { id: "charcoal", name: "Charcoal", note: "Light grey ground, dark containers" },
-  { id: "openalgo", name: "OpenAlgo", note: "Near-black, navy grid" },
-  { id: "quantdesk", name: "QuantDesk", note: "Kite's neutral grey" },
-  { id: "graphite", name: "Graphite", note: "Warm charcoal" },
   { id: "neutral", name: "Neutral", note: "Flat grey, no hue" },
-  { id: "slate", name: "Slate", note: "Blue-grey" },
-  { id: "ink", name: "Ink", note: "Deep navy" },
-  { id: "moss", name: "Moss", note: "Green-grey" },
-  { id: "plum", name: "Plum", note: "Violet-charcoal" },
+  { id: "tradingview", name: "Navy", note: "Navy chart, black frame" },
+  { id: "charcoal", name: "Charcoal", note: "Light grey ground, dark containers" },
 ];
 
 // A new key, so everyone starts on the new default instead of a tone saved before it existed.

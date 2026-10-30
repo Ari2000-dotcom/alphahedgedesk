@@ -13,6 +13,7 @@
   height: var(--mh-strip-h);
   padding: 0 8px;
   border-bottom: 1px solid var(--mh-line);
+  container-type: inline-size;
 }
 .mh-pick-find {
   position: relative;
@@ -21,7 +22,7 @@
   gap: 8px;
   flex: 0 1 230px;
   cursor: text;
-  min-width: 0;
+  min-width: 112px;
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--mh-line-strong);
@@ -29,7 +30,7 @@
   background: var(--mh-bg);
   color: var(--mh-text-tertiary);
 }
-/* No gold ring here: the box lifts its edge a step when it has the keyboard, quietly. */
+/* No focus ring here: the box lifts its edge a step when it has the keyboard, quietly. */
 .mh-pick-find:focus-within {
   border-color: var(--mh-text-tertiary);
 }
@@ -40,14 +41,25 @@
 .mh-pick-subject {
   position: absolute;
   left: 30px;
+  right: 8px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
+  overflow: hidden;
   color: var(--mh-text-strong);
+  font-weight: var(--mh-weight-strong);
   pointer-events: none;
   white-space: nowrap;
 }
+/* A long name gives way before the exchange badge does. */
+.mh-pick-subject-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .mh-pick-subject .mh-chip {
+  flex: none;
   height: 17px;
   padding: 0 5px;
   border: 1px solid var(--mh-line-strong);
@@ -109,4 +121,13 @@
   padding: 10px 12px;
   color: var(--mh-text-secondary);
   font-size: var(--mh-size-caption);
+}
+
+/* A slim strip keeps the search box and the expiry whole: the expiry drops its caption, and the
+   spot drops the name the search box already shows. */
+@container (max-width: 380px) {
+  .mh-pick-strip .mh-picker-caption,
+  .mh-pick-spot-name {
+    display: none;
+  }
 }

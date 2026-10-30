@@ -44,7 +44,7 @@
   border-radius: var(--mh-radius-small);
   background: var(--mh-surface-2);
   color: var(--mh-text-strong);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--mh-shadow-pop);
   font-size: var(--mh-size-control);
 }
 
@@ -245,15 +245,18 @@
   padding: 0 14px;
   border: 0;
   border-radius: var(--mh-radius-small);
-  background: var(--mh-text-strong);
-  color: var(--mh-bg);
+  background: var(--mh-primary-bg);
+  color: var(--mh-primary-text);
   font: inherit;
-  font-weight: var(--mh-weight-emphasis);
+  font-weight: var(--mh-weight-strong);
   cursor: pointer;
-  transition: opacity var(--mh-dur-fast) var(--mh-ease);
+  transition: background-color var(--mh-dur-fast) var(--mh-ease);
 }
 .mh-ws-savebtn:hover:not(:disabled) {
-  opacity: 0.88;
+  background: var(--mh-primary-hover);
+}
+.mh-ws-savebtn:active:not(:disabled) {
+  background: var(--mh-primary-pressed);
 }
 .mh-ws-savebtn:disabled {
   background: var(--mh-surface-3);

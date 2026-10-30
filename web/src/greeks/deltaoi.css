@@ -53,9 +53,7 @@
 }
 .mh-doi-tile-label {
   color: var(--mh-text-tertiary);
-  font-size: var(--mh-size-micro);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--mh-size-caption);
   white-space: nowrap;
 }
 .mh-doi-tile-value {
@@ -144,7 +142,7 @@
 /* The money strike, underlined in the brand colour as the chain underlines its own. */
 .mh-doi-row[data-atm] .mh-doi-strike {
   color: var(--mh-text-strong);
-  box-shadow: inset 0 -2px 0 var(--mh-brand);
+  box-shadow: inset 0 -2px 0 var(--mh-accent);
 }
 
 .mh-doi-side {

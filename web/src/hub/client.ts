@@ -107,7 +107,7 @@ export class Hub {
     const req = `r${this.nextReq++}`;
     return new Promise<T>((resolve, reject) => {
       if (this.status !== "open") {
-        reject(new Error("Not connected to the hub yet."));
+        reject(new Error("Not connected to the data feed yet."));
         return;
       }
       const timer = setTimeout(() => {
@@ -144,7 +144,7 @@ export class Hub {
       this.ws = null;
       for (const [req, p] of this.pending) {
         clearTimeout(p.timer);
-        p.reject(new Error("Connection to the hub was lost; try again."));
+        p.reject(new Error("Lost the connection to the data feed. Try again."));
         this.pending.delete(req);
       }
       if (this.stopped) return;
