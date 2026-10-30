@@ -50,14 +50,17 @@ const DEFAULT_INTERVAL = "1d";
 type OiView = OiProfileMode | "delta" | "off";
 const OI_VIEWS: readonly {
   value: OiView;
+  /** On the toolbar's trigger. */
+  short: string;
   label: string;
+  note: string;
   Icon: typeof OiBothIcon;
 }[] = [
-  { value: "both", label: "Total OI with today's change", Icon: OiBothIcon },
-  { value: "oi", label: "Total OI", Icon: OiTotalIcon },
-  { value: "change", label: "Today's OI change", Icon: OiChangeIcon },
-  { value: "delta", label: "Delta × OI: each strike's OI weighted by its delta (strikes around the money)", Icon: DeltaOiIcon },
-  { value: "off", label: "Hide the OI profile", Icon: EyeOffIcon },
+  { value: "both", short: "OI + chg", label: "Total OI with today's change", note: "Total, today's addition marked", Icon: OiBothIcon },
+  { value: "oi", short: "Total OI", label: "Total OI", note: "Open interest per strike", Icon: OiTotalIcon },
+  { value: "change", short: "OI change", label: "Today's OI change", note: "Added or shed today", Icon: OiChangeIcon },
+  { value: "delta", short: "Δ × OI", label: "Delta × OI", note: "Every strike, vs 2 min", Icon: DeltaOiIcon },
+  { value: "off", short: "OI off", label: "Hide the OI profile", note: "", Icon: EyeOffIcon },
 ];
 
 export interface ScripPick {
@@ -290,19 +293,22 @@ export function ScripPage({
                 }
                 options={allExpiries.map((e) => ({ value: e, label: dayLabel(e) }))}
               />
-              <div className="mh-oi-views" role="group" aria-label="OI profile">
-                <span className="mh-oi-caption" aria-hidden>
-                  OI
-                </span>
-                {OI_VIEWS.map(({ value, label, Icon }) => (
-                  <button key={value} type="button" className="mh-oi-view" aria-pressed={oiView === value} aria-label={label} title={label} onClick={() => setOiView(value)}>
-                    <Icon size={16} />
-                  </button>
-                ))}
-                {deltaOn ? (
-                  <span className="mh-oi-caption">{deltaRows.length > 0 ? "Δ×OI · every strike · move vs 2 min" : doi.error || doi.waiting}</span>
-                ) : null}
-              </div>
+              <Dropdown
+                label="OI profile"
+                caption={false}
+                value={oiView}
+                onChange={setOiView}
+                renderValue={(o) => {
+                  const v = OI_VIEWS.find((x) => x.value === o?.value);
+                  return v ? (
+                    <>
+                      <v.Icon size={16} /> {v.short}
+                      {deltaOn && deltaRows.length === 0 ? <span className="mh-chip">{doi.error || doi.waiting}</span> : null}
+                    </>
+                  ) : null;
+                }}
+                options={OI_VIEWS.map(({ value, label, note, Icon }) => ({ value, label, note, icon: <Icon size={16} />, separator: value === "off" }))}
+              />
             </>
           ) : null}
           <span className="mh-spacer" />
