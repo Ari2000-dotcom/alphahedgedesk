@@ -144,3 +144,17 @@
 /* The row stays one line as its panel narrows: measured, the toggles' moves give way first, then
    their values (the axis tags still carry them), then the ATM chip's move (ui/fitRow.ts). A row of
    picked straddles too long for that wraps. */
+
+/* The spotlight: the premium chip is the main one, a soft ring in its colour. The chips' text
+   keeps its own look: only the lines on the chart fade. */
+.mh-chipbox[data-main] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mh-line-straddle) 45%, transparent);
+}
+.mh-chipbox,
+.mh-overlay {
+  transition:
+    opacity var(--mh-dur-fast) var(--mh-ease),
+    background-color var(--mh-dur-fast) var(--mh-ease),
+    color var(--mh-dur-fast) var(--mh-ease),
+    box-shadow var(--mh-dur-fast) var(--mh-ease);
+}

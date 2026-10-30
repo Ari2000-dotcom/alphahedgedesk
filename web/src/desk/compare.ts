@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 export const MAX_STRADDLES = 5;
 
 /** The ATM straddle's colour first, then the picks', all told apart on the dark ground. */
-export const PICK_COLOURS = ["#ff7ac6", "#a78bfa", "#c3e66e", "#ffab85", "#4fd1ff"] as const;
+export const PICK_COLOURS = ["#ff9db8", "#a78bfa", "#c3e66e", "#ffab85", "#4fd1ff"] as const;
 export const ATM_COLOUR = PICK_COLOURS[0];
 
 export interface Compare {

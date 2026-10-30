@@ -6,7 +6,7 @@ import type { Bar, StraddleSnapshot, StraddleUpdate, TopicMessage, Underlying } 
 import { Dropdown } from "../ui/Dropdown";
 import { useFitRow, wraps } from "../ui/fitRow";
 import { AlertIcon, ChartIcon, CloseIcon, PlusIcon, Spinner } from "../ui/icons";
-import { openOf, percentMove, readingOf, sessionOpens, StraddleChart, toggleLine, useHidden, type HistoryStatus, type LineId, type Move } from "./StraddleChart";
+import { openOf, percentMove, readingOf, sessionOpens, setFocus, StraddleChart, toggleLine, useHidden, type HistoryStatus, type LineId, type Move } from "./StraddleChart";
 import { ATM_COLOUR, MAX_STRADDLES } from "../desk/compare";
 import "./chips.css";
 import { picksFor, togglePick, useCompare } from "../desk/compare";
@@ -439,7 +439,12 @@ export function StraddlePage({
         {pick && bars.length > 0 ? (
           <div className="mh-chips" role="toolbar" aria-label="Straddles on the chart" ref={fitChips}>
             {/* Each chip reads its line at the minute under the crosshair, else the latest one. */}
-            <span className="mh-chipbox">
+            <span
+              className="mh-chipbox"
+              data-main
+              onPointerEnter={() => setFocus("straddle")}
+              onPointerLeave={() => setFocus(null)}
+            >
               <i style={{ background: ATM_COLOUR }} />
               <span className="mh-chipbox-name">{shown ? fmt0(shown.strike) : "ATM"}</span>
               <em>ATM</em>
@@ -480,7 +485,17 @@ export function StraddlePage({
             ).map(([id, label, colour, dash]) => {
               const r = readingOf(id, shown, shownOpen);
               return (
-                <button key={id} type="button" className="mh-overlay" aria-pressed={!hiddenLines.has(id)} onClick={() => toggleLine(id)}>
+                <button
+                  key={id}
+                  type="button"
+                  className="mh-overlay"
+                  aria-pressed={!hiddenLines.has(id)}
+                  onClick={() => toggleLine(id)}
+                  onPointerEnter={() => setFocus(id)}
+                  onPointerLeave={() => setFocus(null)}
+                  onFocus={() => setFocus(id)}
+                  onBlur={() => setFocus(null)}
+                >
                   <svg width="14" height="4" viewBox="0 0 14 4" aria-hidden>
                     <path d="M0 2h14" stroke={`var(${colour})`} strokeWidth="2" strokeDasharray={dash} />
                   </svg>
@@ -497,6 +512,7 @@ export function StraddlePage({
         <div className="mh-container-body">
           {pick && bars.length > 0 ? (
             <StraddleChart
+              live={live}
               bars={chartBars}
               viewKey={viewKey}
               themeKey={themeKey}

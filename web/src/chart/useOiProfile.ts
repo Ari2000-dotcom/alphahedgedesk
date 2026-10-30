@@ -43,6 +43,15 @@ function toData(r: OiProfileReply): OiProfileData {
   };
 }
 
+/** A failed ask (the hub not connected yet after a refresh, a dropped answer) is tried again after
+ *  this, doubling up to the cap, not left for the next minute's round. */
+const RETRY_MS = 1_500;
+const RETRY_CAP_MS = 12_000;
+
+/** The last profile per underlying and expiries, so a refresh or a tab change draws at once and the
+ *  hub's answer replaces it a moment later. */
+const lastProfile = new Map<string, OiProfileData>();
+
 /**
  * The OI profile for one or more expiries of `underlying`: every strike's call and put open
  * interest, summed strike by strike over the picked expiries, as QuantDesk draws it. One hub
@@ -52,34 +61,54 @@ function toData(r: OiProfileReply): OiProfileData {
  */
 export function useOiProfile(hub: Hub, underlying: string, expiries: readonly string[]): { data: OiProfileData | null; loading: boolean } {
   const expiryKey = [...expiries].sort().join(",");
-  const [data, setData] = useState<OiProfileData | null>(null);
+  const cacheKey = `${underlying}|${expiryKey}`;
+  const [data, setData] = useState<OiProfileData | null>(() => lastProfile.get(cacheKey) ?? null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setData(null);
+    setData(lastProfile.get(cacheKey) ?? null);
     if (!underlying || !expiryKey) return;
     let cancelled = false;
     let timer = 0;
+    let inFlight = false;
+    let failures = 0;
     const ask = () => {
+      if (cancelled || inFlight) return;
+      window.clearTimeout(timer);
+      inFlight = true;
       setLoading(true);
       hub
         .request<OiProfileReply>({ op: "oi_profile", underlying, expiries: expiryKey.split(",") }, "oi_profile")
-        .then((r) => !cancelled && setData(toData(r)))
+        .then((r) => {
+          if (cancelled) return;
+          const next = toData(r);
+          if (next.strikes.length === 0) throw new Error("The profile came back empty.");
+          failures = 0;
+          lastProfile.set(cacheKey, next);
+          setData(next);
+        })
         .catch(() => {
-          // Keep the last profile on screen; the next round tries again.
+          // Keep the last profile on screen and try again soon.
+          failures += 1;
         })
         .finally(() => {
+          inFlight = false;
           if (cancelled) return;
           setLoading(false);
-          timer = window.setTimeout(ask, REFRESH_MS);
+          timer = window.setTimeout(ask, failures > 0 ? Math.min(RETRY_CAP_MS, RETRY_MS * 2 ** (failures - 1)) : REFRESH_MS);
         });
     };
     ask();
+    // The hub is often not connected yet when the page has just loaded: ask the moment it opens.
+    const offStatus = hub.onStatus((status) => {
+      if (status === "open" && failures > 0) ask();
+    });
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      offStatus();
     };
-  }, [hub, underlying, expiryKey]);
+  }, [hub, underlying, expiryKey, cacheKey]);
 
   return { data, loading };
 }

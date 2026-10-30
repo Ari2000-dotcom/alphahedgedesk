@@ -6,6 +6,7 @@ import { useChartPixelSnap } from "../chart/useChartPixelSnap";
 import { fmt0, fmt2 } from "../core/format";
 import type { Bar } from "../hub/types";
 import { Spinner } from "../ui/icons";
+import { LivePulse, type PulseDot } from "./LivePulse";
 import type { StrikeLine } from "./useStrikeLines";
 
 /**
@@ -64,7 +65,7 @@ const pct = (value: number) => `${value.toFixed(2)}%`;
 const LINES: Line[] = [
   { id: "fut", label: "Syn fut", tag: "Syn fut", pane: 0, side: "right", colour: "--mh-line-fut", width: 2, priceLine: true, value: (b) => b.synth, format: fmt2 },
   { id: "spot", label: "Spot", tag: "Spot", pane: 0, side: "right", colour: "--mh-line-spot", width: 2, priceLine: false, value: (b) => b.spot, format: fmt2 },
-  { id: "vwap", label: "VWAP", tag: "VWAP", pane: 0, side: "left", colour: "--mh-line-vwap", width: 2, priceLine: false, value: (b) => b.vwap, format: fmt2 },
+  { id: "vwap", label: "VWAP", tag: "VWAP", pane: 0, side: "left", colour: "--mh-line-vwap", width: 1, priceLine: false, value: (b) => b.vwap, format: fmt2 },
   { id: "straddle", label: "ATM straddle", tag: "Straddle", pane: 0, side: "left", colour: "--mh-line-straddle", width: 2, priceLine: true, value: (b) => b.straddle, format: fmt2 },
   { id: "vix", label: "India VIX", tag: "VIX", pane: 1, side: "left", colour: "--mh-line-vix", width: 2, priceLine: false, value: (b) => b.vix, format: fmt2 },
   { id: "iv", label: "ATM IV", tag: "IV", pane: 1, side: "right", colour: "--mh-line-iv", width: 2, priceLine: true, value: (b) => b.iv, format: pct },
@@ -114,6 +115,139 @@ export const useHidden = (): ReadonlySet<LineId> =>
     () => hiddenState,
   );
 
+/**
+ * The spotlight. The premium is the chart's main line: full strength, with the synthetic future and
+ * spot faded behind it. Pointing at a line's chip (or its legend) puts that line forward and fades
+ * every other one; with nothing pointed at, the resting emphasis comes back.
+ */
+let focusState: LineId | null = null;
+const focusListeners = new Set<() => void>();
+
+export function setFocus(id: LineId | null) {
+  if (focusState === id) return;
+  focusState = id;
+  for (const fn of focusListeners) fn();
+}
+
+export const useFocus = (): LineId | null =>
+  useSyncExternalStore(
+    (fn) => {
+      focusListeners.add(fn);
+      return () => focusListeners.delete(fn);
+    },
+    () => focusState,
+  );
+
+const MAIN_LINE: LineId = "straddle";
+const RESTING_FADED = new Set<LineId>(["fut", "spot"]);
+
+/** How a line reads now: how strong its colour is and how heavy it is drawn. */
+export function lookOf(id: LineId, focus: LineId | null): { alpha: number; width: number; faded: boolean } {
+  if (focus) return id === focus ? { alpha: 1, width: 2, faded: false } : { alpha: 0.32, width: 1, faded: true };
+  if (id === MAIN_LINE) return { alpha: 1, width: 2, faded: false };
+  if (id === "vwap") return { alpha: 0.9, width: 1, faded: false };
+  if (RESTING_FADED.has(id)) return { alpha: 0.5, width: 1, faded: true };
+  return { alpha: 0.85, width: 2, faded: false };
+}
+
+/** A colour from the palette at a strength; a form that is not #rrggbb is used as it is. */
+function tint(colour: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(colour.trim());
+  const hex = m?.[1];
+  if (!hex || alpha >= 1) return colour;
+  const n = parseInt(hex, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+/** The share of the price pane's height that the spot and synthetic lines fill, centred. */
+const SPOT_BAND = 0.4;
+/** The least span, in index points, the band stands for: a quiet stretch is not blown up to fill it. */
+const SPOT_MIN_SPAN = 40;
+
+/**
+ * Spot and the synthetic future share the price pane's right scale, and are kept in the middle of
+ * the pane: the premium fills the pane on its own scale, and these two read as a band across its
+ * middle, so both are seen whole at a glance. The scale is set from the minutes in view, centred
+ * and never more than SPOT_BAND of the height, so it neither stretches every wiggle of the index
+ * across the pane nor squeezes it flat when an earlier, wider session is scrolled into view.
+ */
+function fitSpot(chart: Chart, series: ReadonlyMap<LineId, SeriesApi>, bars: readonly Bar[]) {
+  const scale = series.get("fut")?.priceScale();
+  if (!scale || bars.length === 0) return;
+  const view = chart.getVisibleLogicalRange();
+  const from = Math.max(0, Math.floor(view.from));
+  const to = Math.min(bars.length - 1, Math.ceil(view.to));
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = from; i <= to; i++) {
+    const b = bars[i]!;
+    for (const v of [b.spot, b.synth]) {
+      if (!Number.isFinite(v)) continue;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  if (lo > hi) return;
+  const mid = (lo + hi) / 2;
+  const half = Math.max(hi - lo, SPOT_MIN_SPAN) / SPOT_BAND / 2;
+  scale.setOptions({ marginTop: 0, marginBottom: 0 });
+  scale.setFixedRange({ min: mid - half, max: mid + half });
+}
+
+/** How near the pointer must be to a line, in px, to pick it up. */
+const HOVER_REACH = 14;
+/** Once on a line it is held until the pointer is this far off it, so a wobble does not drop it. */
+const HOVER_RELEASE = 30;
+/** Another line takes over only when it is this much nearer than the held one. */
+const HOVER_SWITCH = 6;
+/** The pause before the resting emphasis returns, so the gap between two lines does not flash it. */
+const HOVER_LINGER = 220;
+
+let lingerTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Follows the pointer over the chart: holds the line it is on, and lets go only after a pause. */
+function followPointer(chart: Chart, seriesOf: ReadonlyMap<LineId, SeriesApi>, point: { y: number } | null, pane: number | null | undefined, bar: Bar | undefined) {
+  const pick = point && pane != null && bar ? lineUnder(chart, seriesOf, point.y, pane, bar) : null;
+  if (pick) {
+    clearTimeout(lingerTimer);
+    lingerTimer = undefined;
+    setFocus(pick);
+  } else if (focusState && lingerTimer === undefined) {
+    lingerTimer = setTimeout(() => {
+      lingerTimer = undefined;
+      setFocus(null);
+    }, point ? HOVER_LINGER : 60);
+  }
+}
+
+/** The line the pointer (container y) is on at that minute, favouring the one already held. */
+function lineUnder(chart: Chart, seriesOf: ReadonlyMap<LineId, SeriesApi>, y: number, pane: number, bar: Bar): LineId | null {
+  const rect = chart.plotRect(pane);
+  if (!rect) return null;
+  const gaps = new Map<LineId, number>();
+  for (const line of LINES) {
+    if (line.pane !== pane || hiddenState.has(line.id)) continue;
+    const v = line.value(bar);
+    const series = seriesOf.get(line.id);
+    if (v === null || !Number.isFinite(v) || !series) continue;
+    gaps.set(line.id, Math.abs(rect.top + series.priceScale().priceToY(v) - y));
+  }
+  let near: LineId | null = null;
+  for (const [id, d] of gaps) if (near === null || d < gaps.get(near)!) near = id;
+  const held = focusState && gaps.has(focusState) ? focusState : null;
+  if (held && gaps.get(held)! <= HOVER_RELEASE) {
+    return near && near !== held && gaps.get(near)! <= HOVER_REACH && gaps.get(near)! < gaps.get(held)! - HOVER_SWITCH ? near : held;
+  }
+  return near && gaps.get(near)! <= HOVER_REACH ? near : null;
+}
+
+function paintLines(series: ReadonlyMap<LineId, SeriesApi>, focus: LineId | null) {
+  for (const line of LINES) {
+    const look = lookOf(line.id, focus);
+    series.get(line.id)?.applyOptions({ color: tint(token(line.colour), look.alpha), lineWidth: look.width });
+  }
+}
+
 function writeHidden(hidden: ReadonlySet<LineId>) {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify([...hidden]));
@@ -145,7 +279,10 @@ export function StraddleChart({
   onRetry,
   extras = [],
   onHover,
+  live = false,
 }: Readonly<{
+  /** Today's session, still ticking: its lines end in a pulsing dot. */
+  live?: boolean;
   /** The straddles picked on the option chain: each a line beside the ATM one. */
   extras?: readonly StrikeLine[];
   /** The minute under the crosshair (epoch seconds), or null when it leaves: for the chips row. */
@@ -177,6 +314,12 @@ export function StraddleChart({
   const hidden = useHidden();
   const hiddenRef = useRef(hidden);
   hiddenRef.current = hidden;
+  const focus = useFocus();
+  const barAt = useRef(new Map<number, Bar>());
+  const liveRef = useRef({ live, bars });
+  liveRef.current = { live, bars };
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
   useChartPixelSnap(frame, host);
   // The minute under the crosshair (epoch seconds), or null: the legends read it.
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -205,8 +348,8 @@ export function StraddleChart({
         // "390.80", "16.20", "24.37%".
         priceFormat: { type: "custom", formatter: line.id === "iv" ? pct : fmt2 },
         style: {
-          color: token(line.colour),
-          lineWidth: line.width,
+          color: tint(token(line.colour), lookOf(line.id, focusRef.current).alpha),
+          lineWidth: lookOf(line.id, focusRef.current).width,
           // The name in the box beside its axis tag.
           title: line.tag,
           priceLineVisible: line.priceLine,
@@ -222,6 +365,32 @@ export function StraddleChart({
     }
     chart.setPaneWeight(0, 2);
     chart.setPaneWeight(1, 1);
+
+    // The live end of the premium line: a dot with rings drizzling out of it, on today's session only.
+    chart.addPrimitive(
+      new LivePulse({
+        read: () => {
+          const { live: on, bars: all } = liveRef.current;
+          const last = all[all.length - 1];
+          if (!on || !last) return [];
+          const dots: PulseDot[] = [];
+          for (const line of LINES) {
+            const series = seriesRef.current.get(line.id);
+            const value = line.value(last);
+            if (line.id !== MAIN_LINE || !series || hiddenRef.current.has(line.id) || value === null || !Number.isFinite(value)) continue;
+            dots.push({
+              time: sec(last.t),
+              value,
+              colour: token(line.colour),
+              toY: (v) => series.priceScale().priceToY(v),
+              strength: lookOf(line.id, focusRef.current).alpha,
+            });
+          }
+          return dots;
+        },
+      }),
+      0,
+    );
 
     // The vol pane's legend: the price pane's lines are read on the chips row over the chart.
     READ_ORDER.map(lineOf)
@@ -240,6 +409,8 @@ export function StraddleChart({
     const offMove = chart.on("crosshair:move", (e: CrosshairMoveEvent) => {
       setHoverTime(e.time);
       hoverRef.current?.(e.time);
+      // Pointing at a line on the chart puts it forward. A drag is a pan, not a hover.
+      followPointer(chart, seriesRef.current, e.pressed ? null : e.point, e.paneIndex, e.time === null ? undefined : barAt.current.get(e.time));
     });
     if (import.meta.env.DEV) (window as unknown as { __mhChart?: Chart }).__mhChart = chart;
     // The library asks when a pan nears the oldest loaded minute; it is re-armed once the
@@ -257,7 +428,13 @@ export function StraddleChart({
 
     const series = seriesRef.current;
     const legends = legendRef.current;
+    // Scrolling or zooming: spot and the synthetic future are re-centred on what is in view.
+    const refit = () => fitSpot(chart, seriesRef.current, shownRef.current.bars);
+    const offPan = chart.on("pan", refit);
+    const offZoom = chart.on("zoom", refit);
     return () => {
+      offPan();
+      offZoom();
       offClick();
       offMove();
       chart.destroy();
@@ -268,6 +445,16 @@ export function StraddleChart({
       shownRef.current = { key: "", bars: [] };
     };
   }, []);
+
+  // The bars by minute (epoch seconds), for finding the line under the pointer.
+  useEffect(() => {
+    barAt.current = new Map(bars.map((b) => [sec(b.t), b]));
+  }, [bars]);
+
+  /* -- the spotlight: the main line forward, or the one pointed at ---------------------------------- */
+  useEffect(() => {
+    paintLines(seriesRef.current, focus);
+  }, [focus]);
 
   /* -- shown and hidden lines --------------------------------------------------------------------- */
   useEffect(() => {
@@ -308,6 +495,7 @@ export function StraddleChart({
       for (const line of LINES) seriesRef.current.get(line.id)?.setData(points(bars, line));
       if (!sameView) chart.fitContent();
     }
+    fitSpot(chart, seriesRef.current, bars);
     shownRef.current = { key: viewKey, bars };
     byTime.current = new Map(bars.map((b) => [sec(b.t), b]));
   }, [bars, viewKey]);
@@ -373,9 +561,7 @@ export function StraddleChart({
       const chart = chartRef.current;
       if (!chart) return;
       chart.setTheme(themeFromPage());
-      for (const line of LINES) {
-        seriesRef.current.get(line.id)?.applyOptions({ color: token(line.colour) });
-      }
+      paintLines(seriesRef.current, focusRef.current);
     });
     return () => cancelAnimationFrame(raf);
   }, [themeKey]);
