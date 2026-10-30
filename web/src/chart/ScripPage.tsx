@@ -30,7 +30,8 @@ import {
 import { MultiDropdown } from "../ui/MultiDropdown";
 import { ATR_PERIOD, atrPoints, CANDLE_INTERVALS, useCandles } from "./useCandles";
 import { DEFAULT_BAND, useDeltaOi } from "../greeks/useDeltaOi";
-import { useOiProfile, type OiProfileData, type OiProfileMode } from "./useOiProfile";
+import { useExposureTrend } from "./useExposureTrend";
+import { useOiProfile, type OiProfileMode } from "./useOiProfile";
 import { ScripChart, type LiveTick } from "./ScripChart";
 import { CANDLE_PALETTES, paletteColors, useCandlePalette } from "./candlePalette";
 import { CHART_TYPES, isLineType, useChartType, type ScripChartType } from "./chartType";
@@ -117,17 +118,7 @@ export function ScripPage({
   // since it holds a band of live legs open.
   const deltaOn = oiView === "delta";
   const doi = useDeltaOi(hub, deltaOn ? id : "", deltaOn ? (pickedExpiries[0] ?? "") : "", DEFAULT_BAND);
-  const deltaProfile = useMemo<OiProfileData | null>(() => {
-    if (!deltaOn || doi.rows.length === 0) return null;
-    const read = (v: number | null) => (v === null ? Number.NaN : Math.abs(v));
-    return {
-      strikes: doi.rows.map((r) => r.strike),
-      call: doi.rows.map((r) => read(r.callDeltaOi)),
-      put: doi.rows.map((r) => read(r.putDeltaOi)),
-      callChange: doi.rows.map(() => Number.NaN),
-      putChange: doi.rows.map(() => Number.NaN),
-    };
-  }, [deltaOn, doi.rows]);
+  const deltaProfile = useExposureTrend(doi.rows, deltaOn, `${id}|${pickedExpiries[0] ?? ""}`);
 
   const spec = CANDLE_INTERVALS.find((c) => c.value === interval) ?? CANDLE_INTERVALS[CANDLE_INTERVALS.length - 1]!;
   const { candles, loading, error, note } = useCandles(id, spec.value, spec.days);
@@ -285,7 +276,7 @@ export function ScripPage({
                   </button>
                 ))}
                 {deltaOn ? (
-                  <span className="mh-oi-caption">{doi.ready ? `Δ×OI · ±${DEFAULT_BAND} strikes` : doi.error || doi.waiting}</span>
+                  <span className="mh-oi-caption">{doi.ready ? `Δ×OI · ±${DEFAULT_BAND} strikes · move vs 2 min` : doi.error || doi.waiting}</span>
                 ) : null}
               </div>
             </>
@@ -325,7 +316,7 @@ export function ScripPage({
               name={underlyingOf.get(id)?.name ?? id}
               colors={colors}
               oiProfile={oiView === "off" ? null : deltaOn ? deltaProfile : oiProfile}
-              oiMode={oiView === "off" ? "both" : deltaOn ? "oi" : oiView}
+              oiMode={oiView === "off" ? "both" : deltaOn ? "both" : oiView}
               oiUnit={deltaOn ? "delta" : "oi"}
               viewKey={viewKey}
               themeKey={themeKey}

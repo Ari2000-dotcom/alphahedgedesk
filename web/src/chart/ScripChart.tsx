@@ -350,9 +350,9 @@ export function ScripChart({
           putChange: oiProfile.putChange[i]!,
         }))
       : [];
-    oiBarsRef.current?.setOptions({ levels, mode: oiMode });
+    oiBarsRef.current?.setOptions({ levels, mode: oiMode, unit: oiUnit });
     if (levels.length === 0) setTip(null);
-  }, [oiProfile, oiMode]);
+  }, [oiProfile, oiMode, oiUnit]);
 
   /* -- the palette: the chart's ground and grid follow the page, the candles their preset ------- */
   useEffect(() => {
@@ -392,19 +392,19 @@ function OiTip({ x, y, level, colors, unit }: Readonly<{ x: number; y: number; l
           <tr>
             <th />
             <th>{unit === "delta" ? "Δ×OI" : "OI"}</th>
-            {unit === "oi" ? <th>Chg</th> : null}
+            <th>{unit === "delta" ? "vs 2 min" : "Chg"}</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <th style={{ color: colors.up }}>Call</th>
             <td>{whole(level.call)}</td>
-            {unit === "oi" ? <td>{signed(level.callChange)}</td> : null}
+            <td>{signed(level.callChange)}</td>
           </tr>
           <tr>
             <th style={{ color: colors.down }}>Put</th>
             <td>{whole(level.put)}</td>
-            {unit === "oi" ? <td>{signed(level.putChange)}</td> : null}
+            <td>{signed(level.putChange)}</td>
           </tr>
         </tbody>
       </table>

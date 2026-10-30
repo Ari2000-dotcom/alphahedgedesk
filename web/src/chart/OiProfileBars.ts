@@ -35,6 +35,24 @@ export interface OiProfileBarsOptions {
   putColor: string;
   /** The longest bar, as a share of the plot's width. */
   share?: number;
+  /** What the bars measure: open interest, or delta x OI (then the heaviest strikes are called out). */
+  unit?: "oi" | "delta";
+}
+
+/** Delta x OI: a strike is heavy when it holds this share of its side's largest, the top few only. */
+const HEAVY_SHARE = 0.55;
+const HEAVY_MAX = 3;
+/** A heavy strike's bar, against the others' dimmer one. */
+const HEAVY_ALPHA = 0.85;
+const DELTA_TOTAL_ALPHA = 0.28;
+
+/** Indian short scale, as a desk reads it: 1.42 Cr, 44.1 L, 8.2 K. */
+function compact(v: number): string {
+  const a = Math.abs(v);
+  if (a >= 1e7) return `${(a / 1e7).toFixed(2)} Cr`;
+  if (a >= 1e5) return `${(a / 1e5).toFixed(2)} L`;
+  if (a >= 1e3) return `${(a / 1e3).toFixed(1)} K`;
+  return fmt0(a);
 }
 
 /** Each side's bar thickness, CSS px. */
@@ -113,7 +131,7 @@ export class OiProfileBars implements IPrimitive {
   }
 
   draw(ctx: CanvasRenderingContext2D, rc: PrimitiveRenderContext): void {
-    const { levels, mode, callColor, putColor, share = DEFAULT_SHARE } = this.opts;
+    const { levels, mode, callColor, putColor, share = DEFAULT_SHARE, unit = "oi" } = this.opts;
     this.hits = [];
     this.plotWidth = rc.plotWidth;
     if (levels.length === 0) return;
@@ -127,6 +145,7 @@ export class OiProfileBars implements IPrimitive {
     const gap = Math.max(1, Math.round(GAP * dpr));
     const bottom = rc.plotHeight * dpr + barH;
 
+    const heavy = unit === "delta" ? this.heaviest(levels) : null;
     // The strikes that added the most today, for `both`'s labels: only among those on screen.
     let topCall: { level: OiBarLevel; y: number } | null = null;
     let topPut: { level: OiBarLevel; y: number } | null = null;
@@ -140,7 +159,14 @@ export class OiProfileBars implements IPrimitive {
       if (Number.isFinite(reach) && reach > 0) {
         this.hits.push({ left: (xEnd - reach * scale) / dpr, top: yCall / dpr, bottom: (yPut + barH) / dpr, level });
       }
-      if (mode === "both") {
+      if (mode === "both" && heavy) {
+        const hc = heavy.call.has(level.price);
+        const hp = heavy.put.has(level.price);
+        this.layered(ctx, xEnd, yCall, barH, scale, level, "call", callColor, hc ? HEAVY_ALPHA : DELTA_TOTAL_ALPHA);
+        this.layered(ctx, xEnd, yPut, barH, scale, level, "put", putColor, hp ? HEAVY_ALPHA : DELTA_TOTAL_ALPHA);
+        if (hc) this.heavyMark(ctx, xEnd, yCall, barH, scale, level, "call", callColor, callColor, putColor, dpr);
+        if (hp) this.heavyMark(ctx, xEnd, yPut, barH, scale, level, "put", putColor, callColor, putColor, dpr);
+      } else if (mode === "both") {
         this.layered(ctx, xEnd, yCall, barH, scale, level, "call", callColor);
         this.layered(ctx, xEnd, yPut, barH, scale, level, "put", putColor);
         if (level.callChange > 0 && (!topCall || level.callChange > topCall.level.callChange)) topCall = { level, y: yCall };
@@ -154,6 +180,46 @@ export class OiProfileBars implements IPrimitive {
 
     if (topCall) this.label(ctx, xEnd, topCall.y, barH, scale, topCall.level, "call", callColor, dpr);
     if (topPut) this.label(ctx, xEnd, topPut.y, barH, scale, topPut.level, "put", putColor, dpr);
+  }
+
+  /** Delta x OI: the few strikes on each side that hold the most of it, by price. */
+  private heaviest(levels: readonly OiBarLevel[]): { call: Set<number>; put: Set<number> } {
+    const pick = (side: Side) => {
+      const ranked = levels
+        .map((l) => ({ price: l.price, v: total(l, side) }))
+        .filter((x) => Number.isFinite(x.v) && x.v > 0)
+        .sort((a, b) => b.v - a.v);
+      const top = ranked[0]?.v ?? 0;
+      return new Set(ranked.slice(0, HEAVY_MAX).filter((x) => x.v >= top * HEAVY_SHARE).map((x) => x.price));
+    };
+    return { call: pick("call"), put: pick("put") };
+  }
+
+  /** A heavy strike: its bar outlined, and beside it an arrow (adding or reducing), its exposure and the move. */
+  private heavyMark(ctx: CanvasRenderingContext2D, xEnd: number, y: number, h: number, scale: number, level: OiBarLevel, side: Side, color: string, upColor: string, downColor: string, dpr: number): void {
+    const t = total(level, side);
+    const len = Math.round(t * scale);
+    if (!Number.isFinite(t) || len <= 0) return;
+    const x = xEnd - len;
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, Math.round(dpr));
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, len - 1), Math.max(0, h - 1));
+    const c = change(level, side);
+    const dir = Number.isFinite(c) ? Math.sign(c) : 0;
+    ctx.font = `${Math.round(LABEL_FONT * dpr)}px ${CHART_FONT_FAMILY}`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    const text = `${compact(t)}${dir !== 0 ? `  ${dir > 0 ? "+" : "−"}${compact(c)}` : ""}`;
+    const tx = x - Math.round(6 * dpr);
+    ctx.fillStyle = color;
+    ctx.fillText(text, tx, y + h / 2);
+    if (dir !== 0) {
+      // The arrow ahead of the figures: green while exposure is being added, red while it is shed.
+      const w = ctx.measureText(text).width;
+      ctx.fillStyle = dir > 0 ? upColor : downColor;
+      ctx.fillText(dir > 0 ? "▲" : "▼", tx - w - Math.round(5 * dpr), y + h / 2);
+    }
   }
 
   private largest(levels: readonly OiBarLevel[], mode: OiBarsMode): number {
@@ -184,14 +250,14 @@ export class OiProfileBars implements IPrimitive {
   }
 
   /** `both`: total OI dimmed, today's addition solid at its outer end, OI shed outlined beyond it. */
-  private layered(ctx: CanvasRenderingContext2D, xEnd: number, y: number, h: number, scale: number, level: OiBarLevel, side: Side, color: string): void {
+  private layered(ctx: CanvasRenderingContext2D, xEnd: number, y: number, h: number, scale: number, level: OiBarLevel, side: Side, color: string, totalAlpha = TOTAL_ALPHA): void {
     const t = total(level, side);
     if (!Number.isFinite(t) || t <= 0) return;
     const c = change(level, side);
     const len = Math.round(t * scale);
     if (len <= 0) return;
     const x = xEnd - len;
-    ctx.globalAlpha = TOTAL_ALPHA;
+    ctx.globalAlpha = totalAlpha;
     ctx.fillStyle = color;
     ctx.fillRect(x, y, len, h);
     ctx.globalAlpha = 1;
