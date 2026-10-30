@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   DockviewReact,
   type DockviewApi,
+  type DockviewGroupPanel,
   type DockviewReadyEvent,
   type IDockviewHeaderActionsProps,
   type IDockviewPanelHeaderProps,
@@ -303,6 +304,47 @@ export function addPanelOf(api: DockviewApi, kind: PanelKind, position: Position
 }
 const addStraddle = (api: DockviewApi, position: Position) => addPanelOf(api, "straddle", position);
 
+/**
+ * The room a container keeps when the desk is split in two: the chart takes 60%, the other stuff
+ * the rest. A split from a container's header, a layout from the Layout menu, and a double click
+ * on a divider all land here.
+ */
+const KEEP = 0.6;
+
+/** A container split in two: the new one takes the share the first one does not keep. */
+function split(api: DockviewApi, group: DockviewGroupPanel, direction: "right" | "below") {
+  const room = direction === "right" ? group.api.width : group.api.height;
+  const panel = addStraddle(api, { referenceGroup: group, direction });
+  panel.api.setSize(direction === "right" ? { width: Math.round(room * (1 - KEEP)) } : { height: Math.round(room * (1 - KEEP)) });
+}
+
+/**
+ * A double click on a divider puts the two sides it separates back to their default: the first
+ * (left or upper) one keeps KEEP of the room the two share, the other gets the rest.
+ */
+function resetDivider(api: DockviewApi, sash: Element) {
+  const s = sash.getBoundingClientRect();
+  const vertical = s.height > s.width;
+  const near = (a: number, b: number) => Math.abs(a - b) <= 10;
+  let first: DockviewGroupPanel | undefined;
+  let second: DockviewGroupPanel | undefined;
+  for (const g of api.groups) {
+    const r = g.element.getBoundingClientRect();
+    if (vertical) {
+      const overlaps = r.top < s.bottom && r.bottom > s.top;
+      if (overlaps && near(r.right, s.left + s.width / 2)) first ??= g;
+      if (overlaps && near(r.left, s.left + s.width / 2)) second ??= g;
+    } else {
+      const overlaps = r.left < s.right && r.right > s.left;
+      if (overlaps && near(r.bottom, s.top + s.height / 2)) first ??= g;
+      if (overlaps && near(r.top, s.top + s.height / 2)) second ??= g;
+    }
+  }
+  if (!first || !second) return;
+  if (vertical) first.api.setSize({ width: Math.round((first.api.width + second.api.width) * KEEP) });
+  else first.api.setSize({ height: Math.round((first.api.height + second.api.height) * KEEP) });
+}
+
 /** What a "+" or a split can open, in the order the menus list them. */
 export const PANEL_KINDS: readonly { kind: PanelKind; name: string; note: string }[] = [
   { kind: "straddle", name: "Straddle chart", note: "Compare up to 5" },
@@ -373,10 +415,10 @@ function HeaderSplit({ containerApi, group }: IDockviewHeaderActionsProps) {
   const only = containerApi.groups.length <= 1;
   return (
     <div className="mh-header-split">
-      <button type="button" className="mh-dock-btn" aria-label="Split right" title="Split right" onPointerDown={stop} onClick={() => addStraddle(containerApi, { referenceGroup: group, direction: "right" })}>
+      <button type="button" className="mh-dock-btn" aria-label="Split right" title="Split right" onPointerDown={stop} onClick={() => split(containerApi, group, "right")}>
         <SplitRightIcon size={14} />
       </button>
-      <button type="button" className="mh-dock-btn" aria-label="Split down" title="Split down" onPointerDown={stop} onClick={() => addStraddle(containerApi, { referenceGroup: group, direction: "below" })}>
+      <button type="button" className="mh-dock-btn" aria-label="Split down" title="Split down" onPointerDown={stop} onClick={() => split(containerApi, group, "below")}>
         <SplitDownIcon size={14} />
       </button>
       <button
@@ -417,9 +459,9 @@ export type Preset = "one" | "side" | "stacked" | "three" | "grid";
  */
 export const PRESETS: readonly { id: Preset; name: string; short: string; rects: readonly (readonly [number, number, number, number])[] }[] = [
   { id: "one", name: "One panel", short: "One panel", rects: [[0, 0, 1, 1]] },
-  { id: "side", name: "Straddle and option chain", short: "Chart + chain", rects: [[0, 0, 0.58, 1], [0.58, 0, 0.42, 1]] },
+  { id: "side", name: "Straddle and option chain", short: "Chart + chain", rects: [[0, 0, 0.6, 1], [0.6, 0, 0.4, 1]] },
   { id: "stacked", name: "Straddle above option chain", short: "Chart over chain", rects: [[0, 0, 1, 0.6], [0, 0.6, 1, 0.4]] },
-  { id: "three", name: "Straddle, option chain and details", short: "Chart + chain + details", rects: [[0, 0, 0.56, 1], [0.56, 0, 0.44, 0.62], [0.56, 0.62, 0.44, 0.38]] },
+  { id: "three", name: "Straddle, option chain and details", short: "Chart + chain + details", rects: [[0, 0, 0.6, 1], [0.6, 0, 0.4, 0.62], [0.6, 0.62, 0.4, 0.38]] },
   { id: "grid", name: "Four straddles and the table", short: "4 straddles + table", rects: [[0, 0, 0.5, 0.35], [0.5, 0, 0.5, 0.35], [0, 0.35, 0.5, 0.35], [0.5, 0.35, 0.5, 0.35], [0, 0.7, 1, 0.3]] },
 ];
 
@@ -439,13 +481,13 @@ export function applyPreset(api: DockviewApi, preset: Preset) {
   } else if (preset === "side" || preset === "stacked") {
     const first = straddle(0);
     const second = chain({ referencePanel: first, direction: preset === "side" ? "right" : "below" });
-    if (preset === "side") second.api.setSize({ width: Math.round(api.width * 0.42) });
+    if (preset === "side") second.api.setSize({ width: Math.round(api.width * (1 - KEEP)) });
     else second.api.setSize({ height: Math.round(api.height * 0.4) });
     first.api.setActive();
   } else if (preset === "three") {
     const first = straddle(0);
     const second = chain({ referencePanel: first, direction: "right" });
-    second.api.setSize({ width: Math.round(api.width * 0.44) });
+    second.api.setSize({ width: Math.round(api.width * (1 - KEEP)) });
     const third = addPanelOf(api, "details", { referencePanel: second, direction: "below" });
     third.api.setSize({ height: Math.round(api.height * 0.38) });
     first.api.setActive();
@@ -587,6 +629,18 @@ export function Workspace({ hub, themeKey, onApi }: Readonly<{ hub: Hub; themeKe
 
   // Fullscreen on and off resizes the window without changing its width, so this should never
   // matter — dockview watches its own element with a ResizeObserver and relays out on its own.
+  // A double click on a divider puts the two sides back to their default share.
+  useEffect(() => {
+    const el = host.current;
+    if (!api || !el) return;
+    const onDouble = (e: Event) => {
+      const sash = (e.target as Element | null)?.closest(".dv-sash");
+      if (sash) resetDivider(api, sash);
+    };
+    el.addEventListener("dblclick", onDouble);
+    return () => el.removeEventListener("dblclick", onDouble);
+  }, [api]);
+
   // Chrome was seen leaving a stale, too-wide layout after exiting fullscreen even so (a
   // horizontal scrollbar on a page that never otherwise has one), so the dock is told its host's
   // real size explicitly once the transition settles, past whatever frame that glitch landed in.
