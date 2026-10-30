@@ -105,18 +105,18 @@
     inset 1px 0 0 var(--mh-dock-accent),
     inset -1px 0 0 var(--mh-dock-accent);
 }
-/* Pointing at a tab that is not the active one gives it the active tab's look: the plate's own
-   ground and strong text, with the frame's edge a shade lighter, a preview of what a click brings.
+/* Pointing at a tab that is not the active one lifts it toward the active tab: strong text and an
+   edge in grey, with no fill at all, so the ground behind shows through.
    The long selector is to outrank the library's own tab colours, which a group's state sets. */
 .mh-dock .dv-groupview .dv-tabs-and-actions-container .dv-tabs-container .dv-tab.dv-inactive-tab:hover {
-  background: var(--mh-bg);
+  background: transparent;
   color: var(--mh-text-strong);
   border-top-left-radius: var(--mh-dock-radius);
   border-top-right-radius: var(--mh-dock-radius);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--mh-dock-accent) 55%, transparent),
-    inset 1px 0 0 color-mix(in srgb, var(--mh-dock-accent) 55%, transparent),
-    inset -1px 0 0 color-mix(in srgb, var(--mh-dock-accent) 55%, transparent);
+    inset 0 1px 0 var(--mh-text-disabled),
+    inset 1px 0 0 var(--mh-text-disabled),
+    inset -1px 0 0 var(--mh-text-disabled);
 }
 
 /* A tab's insides (shell/Workspace.tsx `DeskTab`): icon, title, a close button that holds its
